@@ -25,6 +25,7 @@
           <span id="py-env" class="hidden"></span>
           <button id="btn-run" class="hidden">&#x25B6; Run</button>
           <button id="btn-save" disabled>Save</button>
+          <span id="save-indicator"></span>
           <span id="ai-indicator" class="hidden"></span>
           <button id="btn-ai">AI</button>
         </div>
@@ -183,6 +184,24 @@
     <div class="ctx-sep" id="edc-sep2"></div>
     <div class="ctx-item" id="edc-explain">Explain with AI</div>
     <div class="ctx-item" id="edc-search">Search in files<span class="ctx-hint">Ctrl+Shift+F</span></div>
+  </div>
+
+  <!-- Quick Fix Preview (quick_fix_v1) -->
+  <div id="quick-fix" class="hidden">
+    <div id="qf-backdrop"></div>
+    <div id="qf-box">
+      <div id="qf-header">
+        <span id="qf-title">Quick Fix</span>
+        <span id="qf-badge"></span>
+        <button id="qf-close" title="Cancel (Esc)">×</button>
+      </div>
+      <div id="qf-label"></div>
+      <div id="qf-diff"></div>
+      <div id="qf-footer">
+        <button id="qf-cancel">Cancel</button>
+        <button id="qf-apply">Apply Fix</button>
+      </div>
+    </div>
   </div>
 
   <!-- AI Explain Panel -->

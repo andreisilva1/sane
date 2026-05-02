@@ -26,7 +26,7 @@
 | `Enter` | Smart auto-indent (matches indentation; adds level after `:`) |
 | `Backspace` | Smart backspace (removes indent block or auto-pair) |
 | `(` `[` `{` `'` `"` `` ` `` | Auto-closes pair, wraps selection if text is selected |
-| `Ctrl+.` | Autocomplete — suggest imports, local definitions, and Python builtins |
+| `Ctrl+.` | Quick Fix (if error active) · Autocomplete otherwise |
 
 ## Autocomplete (Ctrl+.)
 

@@ -185,10 +185,21 @@ async function saveFile() {
   });
   if (res.ok) {
     isDirty = false;
+    elBtnSave.disabled = true;
     elCurrentFile.textContent = basename(currentPath);
+    showSaveFeedback();
   } else {
     alert('Save failed: ' + res.statusText);
   }
+}
+
+function showSaveFeedback() {
+  const el = document.getElementById('save-indicator');
+  if (!el) return;
+  el.textContent = '✓ saved';
+  el.classList.remove('show');
+  void el.offsetWidth;
+  el.classList.add('show');
 }
 
 function basename(path) {
@@ -198,12 +209,15 @@ function basename(path) {
 // ── Events ────────────────────────────────────────────────
 
 elEditor.addEventListener('input', () => {
+  _ps('input→render');
   if (!isDirty && currentPath) {
     isDirty = true;
+    elBtnSave.disabled = false;
     elCurrentFile.textContent = basename(currentPath) + ' ●';
   }
   refreshHighlight();
-  updateLineNumbers();
+  scheduleLineNumberUpdate();
+  if (_PERF) requestAnimationFrame(() => _pe('input→render', 16));
 });
 
 document.getElementById('btn-open').addEventListener('click', openFolder);
@@ -344,8 +358,12 @@ elEditor.addEventListener('keydown', e => {
     if (e.key.length === 1 || e.key === 'Backspace') closeAutocomplete();
   }
 
-  // Ctrl+. → autocomplete
-  if ((e.ctrlKey || e.metaKey) && e.key === '.') { e.preventDefault(); openAutocomplete(); return; }
+  // Ctrl+. → Quick Fix if active, otherwise autocomplete
+  if ((e.ctrlKey || e.metaKey) && e.key === '.') {
+    e.preventDefault();
+    if (activeQuickFix) { openQuickFixPreview(); } else { openAutocomplete(); }
+    return;
+  }
 
   if (e.key === 'Tab') {
     e.preventDefault();
@@ -449,16 +467,45 @@ function highlightPython(code) {
 
 let hlTimer = null;
 
+function getVisibleLineRange() {
+  const lh   = getLineHeight();
+  const top  = elEditor.scrollTop;
+  const h    = elEditor.clientHeight;
+  const pad  = 18;
+  return {
+    first: Math.max(0, Math.floor((top - pad) / lh)),
+    last:  Math.ceil((top + h - pad) / lh),
+  };
+}
+
 function doRefreshHighlight() {
+  _ps('highlight');
   const wrap = document.getElementById('editor-wrap');
-  if (!wrap || !wrap.classList.contains('hl-active')) return;
-  document.getElementById('editor-highlight').innerHTML = highlightPython(elEditor.value);
+  if (!wrap?.classList.contains('hl-active')) return;
+
+  const hlEl  = document.getElementById('editor-highlight');
+  const code  = elEditor.value;
+  const lines = code.split('\n');
+  const { last } = getVisibleLineRange();
+  const BUFFER  = 10;
+  const splitAt = Math.min(last + BUFFER, lines.length);
+
+  // Full syntax highlight from line 0 → visible+buffer (preserves multi-line context)
+  // Plain escape for lines below — they're invisible anyway
+  const active  = lines.slice(0, splitAt).join('\n');
+  const passive = lines.slice(splitAt).join('\n');
+
+  let html = highlightPython(active);
+  if (passive) html += '\n' + escapeHtml(passive);
+
+  hlEl.innerHTML = html;
   syncHighlightScroll();
+  _pe('highlight', 32);
 }
 
 function refreshHighlight() {
   clearTimeout(hlTimer);
-  hlTimer = setTimeout(doRefreshHighlight, 150);
+  hlTimer = setTimeout(doRefreshHighlight, 200);
 }
 
 function syncHighlightScroll() {
@@ -482,6 +529,7 @@ elEditor.addEventListener('scroll', () => {
   syncHighlightScroll();
   syncLineNumbersScroll();
   requestAnimationFrame(updateLineHighlight);
+  refreshHighlight(); // re-render newly visible lines after scroll
 });
 
 // ── Editor chrome (line numbers + current-line highlight) ──
@@ -490,6 +538,8 @@ function syncLineNumbersScroll() {
   const el = document.getElementById('line-numbers');
   if (el) el.scrollTop = elEditor.scrollTop;
 }
+
+let _lnTimer = null;
 
 function updateLineNumbers() {
   const el = document.getElementById('line-numbers');
@@ -504,11 +554,19 @@ function updateLineNumbers() {
   el.scrollTop = elEditor.scrollTop;
 }
 
+function scheduleLineNumberUpdate() {
+  clearTimeout(_lnTimer);
+  _lnTimer = setTimeout(updateLineNumbers, 40);
+}
+
 function updateLineHighlight() {
   const el = document.getElementById('line-highlight');
   if (!el) return;
-  const lh  = parseFloat(getComputedStyle(elEditor).lineHeight);
-  const row = elEditor.value.slice(0, elEditor.selectionStart).split('\n').length - 1;
+  const lh  = getLineHeight();
+  const text = elEditor.value;
+  const end  = elEditor.selectionStart;
+  let row = 0;
+  for (let i = 0; i < end; i++) if (text.charCodeAt(i) === 10) row++;
   el.style.top    = `${18 + row * lh - elEditor.scrollTop}px`;
   el.style.height = `${lh}px`;
 }
@@ -666,6 +724,12 @@ function findTreeItem(path) {
 // ── Global keyboard shortcuts ─────────────────────────────
 
 document.addEventListener('keydown', (e) => {
+  // Quick Fix dialog keyboard handling
+  if (!document.getElementById('quick-fix')?.classList.contains('hidden')) {
+    if (e.key === 'Escape') { e.preventDefault(); closeQuickFix(); return; }
+    if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey) { e.preventDefault(); applyQuickFix(); return; }
+  }
+
   if (e.key === 'F2' && !e.ctrlKey && !e.metaKey && !e.altKey) {
     if (document.activeElement !== elEditor && selectedTreePath) {
       e.preventDefault();
@@ -1436,7 +1500,7 @@ function highlightErrorLine(lineNum) {
   const el = document.getElementById('error-highlight');
   if (!lineNum) { el.style.display = 'none'; return; }
 
-  const lineH = parseFloat(getComputedStyle(elEditor).lineHeight);
+  const lineH = getLineHeight();
   const padTop = 18;
   el.style.top    = (padTop + (lineNum - 1) * lineH) + 'px';
   el.style.height = lineH + 'px';
@@ -1460,13 +1524,12 @@ function highlightErrorLine(lineNum) {
 function clearErrorHighlight() {
   const el = document.getElementById('error-highlight');
   if (el) el.style.display = 'none';
+  hideErrorInsight();
 }
 
 // ── Traceback parser ──────────────────────────────────────
 
 function parseTraceback(stderr) {
-  if (!stderr.includes('Traceback (most recent call last)')) return null;
-
   const lines  = stderr.trim().split('\n');
   const fileRe = /^\s+File "([^"]+)", line (\d+)/;
 
@@ -1480,23 +1543,347 @@ function parseTraceback(stderr) {
     const cp = (currentPath || '').replace(/\\/g, '/');
     if (cp && (fp === cp || fp.endsWith('/' + cp.split('/').pop()))) {
       errorLineNum = parseInt(m[2]);
-      errorContext  = lines[i + 1]?.trim() || '';
+      const next = lines[i + 1]?.trim() || '';
+      if (!/^[~^ ]+$/.test(next)) errorContext = next;
     }
   }
 
-  // Last non-indented, non-traceback line = the error message
+  // Last non-structural line = the error message (works for traceback + SyntaxError)
   let errorMsg = '';
   for (let i = lines.length - 1; i >= 0; i--) {
     const l = lines[i].trim();
     if (l && !l.startsWith('File ') && !l.startsWith('Traceback') &&
-        !l.startsWith('During') && !/^[~^]+$/.test(l)) {
+        !l.startsWith('During') && !/^[~^]+$/.test(l) && /^[A-Z]/.test(l)) {
       errorMsg = l;
       break;
     }
   }
 
-  return { lineNum: errorLineNum, errorMsg, errorContext };
+  if (!errorLineNum && !errorMsg) return null;
+
+  const colonIdx  = errorMsg.indexOf(':');
+  const errorType   = colonIdx > 0 ? errorMsg.slice(0, colonIdx).trim() : errorMsg;
+  const errorDetail = colonIdx > 0 ? errorMsg.slice(colonIdx + 1).trim() : '';
+
+  return { lineNum: errorLineNum, errorMsg, errorType, errorDetail, errorContext };
 }
+
+// ── Error Insight (error_insight_v1) ──────────────────────
+// To upgrade to AI: replace the ERROR_MAP lookup in showErrorInsight()
+// with a fetch to the local model, passing { errorType, errorDetail, errorContext, lineNum }.
+
+const ERROR_MAP = {
+  NameError:           { explanation: "You're using a name that hasn't been defined.",
+                         suggestion:  "Check spelling and make sure the variable or function is declared before use." },
+  TypeError:           { explanation: "An operation was applied to a value of the wrong type.",
+                         suggestion:  "Check that your values match what's expected — e.g. don't add a string to an integer." },
+  IndexError:          { explanation: "You're accessing a list position that doesn't exist.",
+                         suggestion:  "Check the list length before indexing, or use a smaller index." },
+  KeyError:            { explanation: "You're accessing a dictionary key that doesn't exist.",
+                         suggestion:  "Use .get() for safe access, or check with `key in dict` first." },
+  AttributeError:      { explanation: "You're accessing a method or property that doesn't exist on this object.",
+                         suggestion:  "Check the object's type and verify the attribute name is correct." },
+  ValueError:          { explanation: "A function received a value of the right type but an invalid content.",
+                         suggestion:  "Check the value being passed — e.g. converting a non-numeric string to int." },
+  ImportError:         { explanation: "Python couldn't import the specified module.",
+                         suggestion:  "Check the module name spelling and that it's installed." },
+  ModuleNotFoundError: { explanation: "The module you're trying to import was not found.",
+                         suggestion:  "Run `pip install <module>` to install it, or check the import name." },
+  SyntaxError:         { explanation: "Your code has a syntax mistake Python can't parse.",
+                         suggestion:  "Look for missing colons, unmatched brackets or quotes, or bad indentation." },
+  IndentationError:    { explanation: "Your code has inconsistent indentation.",
+                         suggestion:  "Use 4 spaces per level consistently — don't mix tabs and spaces." },
+  ZeroDivisionError:   { explanation: "You're dividing by zero.",
+                         suggestion:  "Check that the divisor isn't zero before dividing." },
+  FileNotFoundError:   { explanation: "Python can't find the file at the path you specified.",
+                         suggestion:  "Check that the path is correct and the file exists." },
+  RecursionError:      { explanation: "Your code is calling itself too many times (infinite recursion).",
+                         suggestion:  "Make sure your recursive function has a base case that stops the recursion." },
+  AssertionError:      { explanation: "An assert statement failed — the condition evaluated to False.",
+                         suggestion:  "Check the assert condition and the values being tested." },
+  PermissionError:     { explanation: "Python doesn't have permission to access this resource.",
+                         suggestion:  "Check the file or folder permissions." },
+  ZeroDivisionError:   { explanation: "You're dividing by zero.",
+                         suggestion:  "Guard the division: check that the divisor isn't zero before dividing." },
+  OverflowError:       { explanation: "A number is too large to be represented.",
+                         suggestion:  "Reduce the magnitude of the value or use a different data type." },
+  MemoryError:         { explanation: "Python ran out of memory.",
+                         suggestion:  "Process data in smaller chunks to reduce memory usage." },
+  RuntimeError:        { explanation: "A runtime error that doesn't fit a more specific category.",
+                         suggestion:  "Read the full error message above for details." },
+  StopIteration:       { explanation: "An iterator ran out of items unexpectedly.",
+                         suggestion:  "Check that you're not iterating past the end of a sequence." },
+  UnicodeDecodeError:  { explanation: "Python couldn't decode bytes as text.",
+                         suggestion:  "Open the file with the correct encoding, e.g. `open(f, encoding='utf-8')`." },
+  UnicodeEncodeError:  { explanation: "Python couldn't encode text as bytes.",
+                         suggestion:  "Specify an encoding that supports all the characters in your string." },
+  OSError:             { explanation: "An OS-level error occurred (file, network, or system).",
+                         suggestion:  "Check file paths, permissions, and whether the resource is available." },
+  TimeoutError:        { explanation: "An operation took too long and timed out.",
+                         suggestion:  "Increase the timeout or check that the resource is responding." },
+};
+
+function showErrorInsight(tb) {
+  if (!tb) return;
+
+  const outputBody = document.getElementById('output-body');
+  document.getElementById('error-insight')?.remove();
+  activeQuickFix = null;
+
+  const info        = ERROR_MAP[tb.errorType] || null;
+  const fix         = getQuickFix(tb);
+  const explanation = info?.explanation || tb.errorDetail || '';
+  const suggestion  = info?.suggestion  || '';
+
+  if (fix?.type === 'auto') {
+    fix.errorType  = tb.errorType;
+    activeQuickFix = fix;
+  }
+
+  const typeBadgeHtml = tb.errorType
+    ? `<span class="ei-type-badge">${escapeHtml(tb.errorType)}</span>` : '';
+  const lineBadgeHtml = tb.lineNum
+    ? `<span class="ei-line-badge">line ${tb.lineNum}</span>` : '';
+  const fixBtnHtml = fix?.type === 'auto'
+    ? `<button class="ei-fix-btn" title="Preview and apply fix (Ctrl+.)">⚡ Quick Fix</button>` : '';
+
+  const exRow = explanation
+    ? `<div class="ei-section"><span class="ei-label">Explanation</span>
+       <p class="ei-text">${escapeHtml(explanation)}</p></div>` : '';
+  const sgRow = suggestion
+    ? `<div class="ei-section"><span class="ei-label">Suggestion</span>
+       <p class="ei-text ei-hint">${escapeHtml(suggestion)}</p></div>` : '';
+  const qfRow = fix?.type === 'suggest' && fix.suggestionCode
+    ? `<div class="ei-section"><span class="ei-label">Suggested fix</span>
+       <code class="ei-code">${escapeHtml(fix.suggestionCode)}</code></div>` : '';
+  const cxRow = tb.errorContext
+    ? `<div class="ei-section"><span class="ei-label">Code</span>
+       <code class="ei-code">${escapeHtml(tb.errorContext)}</code></div>` : '';
+  const msgRow = tb.errorDetail
+    ? `<div class="ei-section"><span class="ei-label">Message</span>
+       <code class="ei-msg">${escapeHtml(tb.errorDetail)}</code></div>` : '';
+
+  const el = document.createElement('div');
+  el.id = 'error-insight';
+  el.innerHTML = `
+    <div id="ei-header">
+      <span id="ei-toggle">▼</span>
+      <span class="ei-title">Error Insight</span>
+      ${typeBadgeHtml}
+      ${lineBadgeHtml}
+      ${fixBtnHtml}
+    </div>
+    <div id="ei-body">${exRow}${sgRow}${qfRow}${cxRow}${msgRow}</div>`;
+
+  if (fix?.type === 'auto') {
+    el.querySelector('.ei-fix-btn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      openQuickFixPreview();
+    });
+  }
+
+  el.querySelector('#ei-header').addEventListener('click', () => {
+    const body   = el.querySelector('#ei-body');
+    const toggle = el.querySelector('#ei-toggle');
+    const hidden = body.classList.toggle('collapsed');
+    toggle.textContent = hidden ? '▶' : '▼';
+  });
+
+  outputBody.appendChild(el);
+  outputBody.scrollTop = outputBody.scrollHeight;
+}
+
+function hideErrorInsight() {
+  document.getElementById('error-insight')?.remove();
+  activeQuickFix = null;
+}
+
+// ── Quick Fix (quick_fix_v1) ──────────────────────────────
+
+let activeQuickFix = null;
+
+function getQuickFix(tb) {
+  if (!tb?.errorType) return null;
+  const lines = elEditor.value.split('\n');
+  switch (tb.errorType) {
+    case 'NameError':            return _qfNameError(tb, lines);
+    case 'ImportError':
+    case 'ModuleNotFoundError':  return _qfImport(tb, lines);
+    case 'KeyError':             return _qfKeyError(tb, lines);
+    case 'IndexError':           return _qfIndexSuggest(tb, lines);
+    default: return null;
+  }
+}
+
+function _qfNameError(tb, lines) {
+  const m = tb.errorDetail?.match(/name '(.+?)' is not defined/);
+  if (!m) return null;
+  const varName = m[1];
+  const lineIdx = (tb.lineNum ?? 0) - 1;
+  if (lineIdx < 0 || lineIdx >= lines.length) return null;
+
+  const indent  = (lines[lineIdx].match(/^(\s*)/) || ['', ''])[1];
+  const newLine = `${indent}${varName} = None`;
+
+  return {
+    type:  'auto',
+    label: `Define \`${varName} = None\` above line ${tb.lineNum}`,
+    diff:  _diffInsert(lines, lineIdx, newLine),
+    apply() {
+      const upd = [...lines];
+      upd.splice(lineIdx, 0, newLine);
+      return { content: upd.join('\n'), cursorLine: lineIdx };
+    },
+  };
+}
+
+function _qfImport(tb, lines) {
+  const m = tb.errorDetail?.match(/No module named '(.+?)'/);
+  if (!m) return null;
+  const modName = m[1].split('.')[0];
+  const newLine = `import ${modName}`;
+
+  if (lines.some(l => l.trim() === newLine)) return null;
+
+  let insertIdx = 0;
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i].trim();
+    if (l.startsWith('import ') || l.startsWith('from ')) {
+      insertIdx = i + 1;
+    } else if (l && !l.startsWith('#') && insertIdx > 0) {
+      break;
+    }
+  }
+
+  return {
+    type:  'auto',
+    label: `Add \`import ${modName}\` at line ${insertIdx + 1}`,
+    diff:  _diffInsert(lines, insertIdx, newLine),
+    apply() {
+      const upd = [...lines];
+      upd.splice(insertIdx, 0, newLine);
+      return { content: upd.join('\n'), cursorLine: insertIdx };
+    },
+  };
+}
+
+function _qfKeyError(tb, lines) {
+  const lineIdx = (tb.lineNum ?? 0) - 1;
+  if (lineIdx < 0 || lineIdx >= lines.length) return null;
+
+  const rawKey  = (tb.errorDetail || '').replace(/^['"]+|['"]+$/g, '');
+  if (!rawKey) return null;
+
+  const line = lines[lineIdx];
+  const esc  = rawKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re   = new RegExp(`(\\w+)\\[(?:"${esc}"|'${esc}')\\]`);
+  const hit  = line.match(re);
+  if (!hit) return null;
+
+  const newLine = line.replace(hit[0], `${hit[1]}.get("${rawKey}")`);
+  if (newLine === line) return null;
+
+  return {
+    type:  'auto',
+    label: `Replace \`${hit[0]}\` with \`${hit[1]}.get("${rawKey}")\` on line ${tb.lineNum}`,
+    diff:  _diffReplace(lines, lineIdx, newLine),
+    apply() {
+      const upd = [...lines];
+      upd[lineIdx] = newLine;
+      return { content: upd.join('\n'), cursorLine: lineIdx };
+    },
+  };
+}
+
+function _qfIndexSuggest(tb, lines) {
+  const lineIdx = (tb.lineNum ?? 0) - 1;
+  if (lineIdx < 0 || lineIdx >= lines.length) return null;
+
+  const line = lines[lineIdx];
+  const m    = line.match(/(\w+)\[(\w+|\d+)\]/);
+  if (!m) return null;
+
+  const indent = (line.match(/^(\s*)/) || ['', ''])[1];
+  return {
+    type:          'suggest',
+    label:         `Add bounds check for \`${m[1]}[${m[2]}]\``,
+    suggestionCode: `${indent}if len(${m[1]}) > ${m[2]}:\n${indent}    ${line.trim()}`,
+  };
+}
+
+function _diffInsert(lines, idx, newLine) {
+  const d = [];
+  if (idx > 0)              d.push({ op: 'ctx', text: lines[idx - 1], ln: idx });
+  d.push(                   { op: 'add', text: newLine,      ln: null });
+  if (idx < lines.length)   d.push({ op: 'ctx', text: lines[idx],     ln: idx + 1 });
+  return d;
+}
+
+function _diffReplace(lines, idx, newLine) {
+  const d = [];
+  if (idx > 0)                d.push({ op: 'ctx', text: lines[idx - 1], ln: idx });
+  d.push(                     { op: 'del', text: lines[idx],   ln: idx + 1 });
+  d.push(                     { op: 'add', text: newLine,       ln: null });
+  if (idx + 1 < lines.length) d.push({ op: 'ctx', text: lines[idx + 1], ln: idx + 2 });
+  return d;
+}
+
+function openQuickFixPreview() {
+  if (!activeQuickFix) return;
+  const fix = activeQuickFix;
+
+  document.getElementById('qf-badge').textContent = fix.errorType || '';
+  document.getElementById('qf-label').textContent = fix.label;
+
+  const diffEl = document.getElementById('qf-diff');
+  diffEl.innerHTML = fix.diff.map(row => {
+    const prefix = row.op === 'add' ? '+ ' : row.op === 'del' ? '− ' : '  ';
+    const cls    = row.op === 'add' ? 'qf-add' : row.op === 'del' ? 'qf-del' : 'qf-ctx';
+    const lnTxt  = row.ln != null ? row.ln : '';
+    return `<div class="qf-row ${cls}">` +
+      `<span class="qf-line-num">${lnTxt}</span>` +
+      `<span class="qf-prefix">${prefix}</span>` +
+      `<code>${escapeHtml(row.text)}</code>` +
+      `</div>`;
+  }).join('');
+
+  document.getElementById('quick-fix').classList.remove('hidden');
+  document.getElementById('qf-apply').focus();
+}
+
+function closeQuickFix() {
+  document.getElementById('quick-fix').classList.add('hidden');
+}
+
+function applyQuickFix() {
+  if (!activeQuickFix) { closeQuickFix(); return; }
+
+  const { content, cursorLine } = activeQuickFix.apply();
+
+  elEditor.value = content;
+  isDirty = true;
+  elBtnSave.disabled = false;
+  elCurrentFile.textContent = basename(currentPath) + ' ●';
+  refreshHighlight();
+  updateLineNumbers();
+
+  // Place cursor at the start of the inserted/modified line
+  const lines  = content.split('\n');
+  let offset   = 0;
+  for (let i = 0; i < Math.min(cursorLine, lines.length); i++) offset += lines[i].length + 1;
+  elEditor.focus();
+  elEditor.setSelectionRange(offset, offset);
+  updateLineHighlight();
+
+  clearErrorHighlight();
+  closeQuickFix();
+}
+
+// Wire up Quick Fix dialog buttons
+document.getElementById('qf-close').addEventListener('click',    closeQuickFix);
+document.getElementById('qf-cancel').addEventListener('click',   closeQuickFix);
+document.getElementById('qf-backdrop').addEventListener('click', closeQuickFix);
+document.getElementById('qf-apply').addEventListener('click',    applyQuickFix);
 
 // ── Python execution ──────────────────────────────────────
 
@@ -1533,6 +1920,7 @@ async function runPython() {
   panel.classList.remove('hidden');
   body.innerHTML = '<span class="out-info">Running…</span>';
   status.textContent = '';
+  status.className = 'status-running';
   isRunning = true;
   btnRun.disabled = true;
   btnStop.classList.remove('hidden');
@@ -1541,7 +1929,14 @@ async function runPython() {
   const ctrl = new AbortController();
   runAbortCtrl = ctrl;
   let firstOutput = true;
+  let accStdout   = '';
   let accStderr   = '';
+
+  const runStart = Date.now();
+  const runTimerID = setInterval(() => {
+    const s = ((Date.now() - runStart) / 1000).toFixed(1);
+    status.textContent = `running · ${s}s`;
+  }, 100);
 
   try {
     const res = await fetch(`${API}/run`, {
@@ -1555,6 +1950,7 @@ async function runPython() {
       const msg = await res.text();
       body.innerHTML = `<span class="out-stderr">${escapeHtml(msg)}</span>`;
       status.textContent = 'error';
+      status.className = 'status-error';
       foEmit('fo-result', { status: 'error', stdout: '', stderr: msg, duration: 0 });
       return;
     }
@@ -1586,30 +1982,37 @@ async function runPython() {
           span.textContent = evt.text + '\n';
           body.appendChild(span);
           body.scrollTop = body.scrollHeight;
+          if (evt.type === 'stdout') accStdout += evt.text + '\n';
           if (evt.type === 'stderr') accStderr += evt.text + '\n';
+          foEmit('fo-line', { type: evt.type, text: evt.text });
 
         } else if (evt.type === 'error') {
           body.innerHTML = `<span class="out-stderr">${escapeHtml(evt.text)}</span>`;
           status.textContent = 'error';
+          status.className = 'status-error';
           foEmit('fo-result', { status: 'error', stdout: '', stderr: evt.text, duration: 0 });
           return;
 
         } else if (evt.type === 'done') {
           if (firstOutput) body.innerHTML = '<span class="out-info">(no output)</span>';
           const ms    = evt.duration;
-          const label = evt.exitCode === 0 ? 'finished'
-                      : evt.exitCode === -1 ? 'killed'
-                      : `exit ${evt.exitCode}`;
+          const isOk  = evt.exitCode === 0;
+          const label = isOk ? 'finished' : evt.exitCode === -1 ? 'killed' : `exit ${evt.exitCode}`;
           status.textContent = `${label} · ${ms < 1000 ? ms + 'ms' : (ms / 1000).toFixed(2) + 's'}`;
+          status.className = isOk ? 'status-finished' : 'status-error';
 
-          // Highlight error line from accumulated stderr
+          // Error highlight + Error Insight
           if (accStderr) {
             const tb = parseTraceback(accStderr);
-            if (tb?.lineNum) highlightErrorLine(tb.lineNum);
+            if (tb) {
+              if (tb.lineNum) highlightErrorLine(tb.lineNum);
+              if (!isOk) showErrorInsight(tb);
+            }
           }
 
           foEmit('fo-result', {
-            status:   evt.exitCode === 0 ? 'finished' : 'error',
+            status:   isOk ? 'finished' : 'error',
+            stdout:   accStdout,
             stderr:   accStderr,
             exitCode: evt.exitCode,
             duration: ms,
@@ -1621,12 +2024,16 @@ async function runPython() {
     if (err.name === 'AbortError') {
       if (firstOutput) body.innerHTML = '<span class="out-info">(killed)</span>';
       status.textContent = 'killed';
+      status.className = 'status-killed';
+      foEmit('fo-result', { status: 'killed', stdout: accStdout, stderr: accStderr, duration: Date.now() - runStart });
     } else {
       body.innerHTML = `<span class="out-stderr">${escapeHtml(String(err))}</span>`;
       status.textContent = 'error';
+      status.className = 'status-error';
+      foEmit('fo-result', { status: 'error', stdout: '', stderr: String(err), duration: 0 });
     }
-    foEmit('fo-result', { status: 'error', stdout: '', stderr: String(err), duration: 0 });
   } finally {
+    clearInterval(runTimerID);
     isRunning    = false;
     runAbortCtrl = null;
     btnRun.disabled = false;
@@ -1886,18 +2293,18 @@ const FONTS = [
 
 const PRESETS = {
   default: {
-    '--bg': '#1a1a1a', '--bg-sidebar': '#161616', '--bg-header': '#111111',
-    '--text': '#c8c8c8', '--text-dim': '#555555', '--text-bright': '#e8e8e8',
-    '--accent': '#5294e2', '--border': '#262626', '--selected': '#1e3050', '--hover': '#1f1f1f',
-    '--hl-kw': '#b4a0e5', '--hl-str': '#89c07a', '--hl-comment': '#4d5566',
-    '--hl-num': '#d4976c', '--hl-fn': '#82b4d4', '--hl-deco': '#e5a550',
+    '--bg': '#0f1117', '--bg-sidebar': '#0c0d12', '--bg-header': '#0d0f14',
+    '--text': '#c4d0dc', '--text-dim': '#4c5c6e', '--text-bright': '#dceaf8',
+    '--accent': '#4d8fd4', '--border': '#1c2230', '--selected': '#0f2038', '--hover': '#131924',
+    '--hl-kw': '#c792ea', '--hl-str': '#98c379', '--hl-comment': '#384d5e',
+    '--hl-num': '#d19a66', '--hl-fn': '#61afef', '--hl-deco': '#e5c07b',
     '--font': FONTS[0], '--size': '13px',
   },
   black: {
-    '--bg': '#0c0c0c', '--bg-sidebar': '#080808', '--bg-header': '#050505',
-    '--text': '#d4d4d4', '--text-dim': '#3a3a3a', '--text-bright': '#f0f0f0',
-    '--accent': '#4a90d9', '--border': '#181818', '--selected': '#0d2040', '--hover': '#101010',
-    '--hl-kw': '#c09ee8', '--hl-str': '#7dc07a', '--hl-comment': '#363d4a',
+    '--bg': '#060708', '--bg-sidebar': '#040506', '--bg-header': '#030405',
+    '--text': '#d0dce8', '--text-dim': '#384858', '--text-bright': '#eaf2ff',
+    '--accent': '#4080c8', '--border': '#10141c', '--selected': '#081830', '--hover': '#0c1018',
+    '--hl-kw': '#c09ee8', '--hl-str': '#7dc07a', '--hl-comment': '#28384a',
     '--hl-num': '#e0985a', '--hl-fn': '#78b0d8', '--hl-deco': '#e8a840',
     '--font': FONTS[0], '--size': '13px',
   },
@@ -1922,6 +2329,8 @@ function applyTheme(vars) {
       root.style.setProperty(k, v);
     }
   }
+  _lineHeightCache = 0;
+  _charWidthCache  = { val: 0, expires: 0 };
 }
 
 function saveTheme() {
@@ -2370,9 +2779,30 @@ function parseImports(code) {
   return imports;
 }
 
-// ── Character width measurement ───────────────────────────
+// ── Performance logger (editor_performance_v1) ────────────
+// Enable: localStorage.setItem('sane_perf', '1') in DevTools console
+
+const _PERF = localStorage.getItem('sane_perf') === '1';
+
+function _ps(label) {
+  if (_PERF) performance.mark(label + '_s');
+}
+function _pe(label, ms = 16) {
+  if (!_PERF) return;
+  performance.mark(label + '_e');
+  performance.measure(label, label + '_s', label + '_e');
+  const [e] = performance.getEntriesByName(label, 'measure');
+  if (e?.duration > ms)
+    console.warn(`[sane/perf] ${label}: ${e.duration.toFixed(1)}ms (>${ms}ms)`);
+  performance.clearMarks(label + '_s');
+  performance.clearMarks(label + '_e');
+  performance.clearMeasures(label);
+}
+
+// ── Character width + line height measurement ─────────────
 
 let _charWidthCache = { val: 0, expires: 0 };
+let _lineHeightCache = 0;
 
 function getCharWidth() {
   const now = Date.now();
@@ -2386,10 +2816,15 @@ function getCharWidth() {
   return w;
 }
 
+function getLineHeight() {
+  if (!_lineHeightCache)
+    _lineHeightCache = parseFloat(getComputedStyle(elEditor).lineHeight) || 21.45;
+  return _lineHeightCache;
+}
+
 function getEditorRowCol(clientX, clientY) {
   const rect  = elEditor.getBoundingClientRect();
-  const style = getComputedStyle(elEditor);
-  const lineH = parseFloat(style.lineHeight);
+  const lineH = getLineHeight();
   const charW = getCharWidth();
   const relY  = clientY - rect.top  + elEditor.scrollTop  - 18;
   const relX  = clientX - rect.left + elEditor.scrollLeft - 22;
@@ -2499,8 +2934,7 @@ function getCaretCoords() {
   const row   = lines.length - 1;
   const col   = lines[row].length;
   const rect  = elEditor.getBoundingClientRect();
-  const style = getComputedStyle(elEditor);
-  const lineH = parseFloat(style.lineHeight);
+  const lineH = getLineHeight();
   const charW = getCharWidth();
   return {
     x: rect.left + 22 + col * charW - elEditor.scrollLeft,
@@ -2535,7 +2969,7 @@ function renderAutocomplete() {
   const aw = ac.offsetWidth, ah = ac.offsetHeight;
   let fx = x, fy = y;
   if (fx + aw > window.innerWidth)  fx = window.innerWidth  - aw - 8;
-  if (fy + ah > window.innerHeight) fy = y - ah - parseFloat(getComputedStyle(elEditor).lineHeight) - 4;
+  if (fy + ah > window.innerHeight) fy = y - ah - getLineHeight() - 4;
   ac.style.left = `${fx}px`;
   ac.style.top  = `${fy}px`;
   ac.children[acSelected]?.scrollIntoView({ block: 'nearest' });
