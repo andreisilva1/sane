@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sane</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app">
+    <div id="sidebar">
+      <div id="sidebar-header">
+        <div id="sidebar-actions">
+          <button id="btn-open">Open Folder</button>
+          <button id="btn-terminal" title="Terminal (Ctrl+`)">&#x276F;_</button>
+        </div>
+        <span id="folder-name"></span>
+      </div>
+      <div id="file-tree"></div>
+    </div>
+    <div id="editor-area">
+      <div id="editor-header">
+        <span id="current-file">no file open</span>
+        <div id="editor-actions">
+          <span id="py-env" class="hidden"></span>
+          <button id="btn-run" class="hidden">&#x25B6; Run</button>
+          <button id="btn-save" disabled>Save</button>
+          <span id="ai-indicator" class="hidden"></span>
+          <button id="btn-ai">AI</button>
+        </div>
+      </div>
+      <div id="editor-body">
+        <div id="line-numbers"></div>
+        <div id="editor-wrap">
+          <div id="line-highlight"></div>
+          <div id="error-highlight"></div>
+          <div id="editor-highlight" aria-hidden="true"></div>
+          <textarea id="editor" placeholder="Select a file to edit..." spellcheck="false"></textarea>
+        </div>
+      </div>
+    </div>
+    <div id="terminal-panel" class="hidden">
+      <div id="term-header">
+        <span id="term-title">Terminal</span>
+        <span id="term-cwd"></span>
+        <button id="term-clear">Clear</button>
+        <button id="term-close" title="Close">×</button>
+      </div>
+      <div id="term-output"></div>
+      <div id="term-input-row">
+        <span id="term-prompt">$</span>
+        <input id="term-input" type="text" spellcheck="false" autocomplete="off"
+               placeholder="command…">
+      </div>
+    </div>
+    <div id="output-panel" class="hidden">
+      <div id="output-header">
+        <span id="output-title">Output</span>
+        <span id="output-status"></span>
+        <button id="btn-stop-run" class="hidden" title="Stop (Ctrl+Shift+K)">■ Stop</button>
+        <button id="btn-popout" title="Pop-out (Ctrl+Shift+O)">↗</button>
+        <button id="output-close" title="Close">×</button>
+      </div>
+      <div id="output-body"></div>
+    </div>
+  </div>
+  <!-- Grid Editor (Ctrl+Alt+G) -->
+  <div id="grid-editor" class="hidden">
+    <div id="ge-backdrop"></div>
+    <div id="ge-box">
+      <div id="ge-header">
+        <span id="ge-title">Grid Editor</span>
+        <span id="ge-hint">Drag components · Drop on mesa to hide</span>
+        <div id="ge-btns">
+          <button id="ge-reset">Reset</button>
+          <button id="ge-export">Export JSON</button>
+          <button id="ge-cancel">Cancel</button>
+          <button id="ge-save">Save</button>
+        </div>
+      </div>
+      <div id="ge-canvas"><!-- cells + tiles built by JS --></div>
+      <div id="ge-mesa">
+        <span id="ge-mesa-label">Mesa</span>
+        <div id="ge-mesa-items"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Theme panel (Ctrl+,) -->
+  <div id="theme-panel" class="hidden">
+    <div id="theme-backdrop"></div>
+    <div id="theme-box">
+      <div id="theme-hdr">
+        <span>Theme</span>
+        <button id="theme-close">×</button>
+      </div>
+      <div id="theme-presets">
+        <button class="tpreset active" data-p="default">Default</button>
+        <button class="tpreset" data-p="black">Black</button>
+        <button class="tpreset" data-p="white">White</button>
+        <button class="tpreset" data-p="custom">Custom</button>
+      </div>
+      <div id="theme-colors"><!-- built by JS --></div>
+      <div id="theme-footer">
+        <button id="theme-reset">Reset</button>
+        <button id="theme-export">Export</button>
+        <label id="theme-import-btn">Import<input type="file" id="theme-import" accept=".json"></label>
+      </div>
+    </div>
+  </div>
+
+  <!-- AI Plugin Install Widget (bottom-right corner) -->
+  <div id="ai-install" class="hidden">
+    <div id="aii-header">
+      <span>AI Plugin</span>
+      <button id="aii-dismiss" title="Dismiss">×</button>
+    </div>
+    <div id="aii-body">
+      <p id="aii-message">Ollama not found. Run in PowerShell:</p>
+      <div id="aii-cmd">
+        <code id="aii-cmd-text">irm https://ollama.com/install.ps1 | iex</code>
+        <button id="aii-copy" title="Copy">⎘</button>
+      </div>
+      <span id="aii-hint">Then click AI again to continue.</span>
+    </div>
+  </div>
+
+  <!-- AI Panel -->
+  <div id="ai-panel" class="hidden">
+    <div id="ai-backdrop"></div>
+    <div id="ai-box">
+      <div id="ai-header">
+        <span id="ai-title">AI Models</span>
+        <span id="ai-ollama-status"></span>
+      </div>
+      <div id="ai-model-list"></div>
+    </div>
+  </div>
+
+  <!-- Global Search (Ctrl+Shift+F) -->
+  <div id="global-search" class="hidden">
+    <div id="gs-backdrop"></div>
+    <div id="gs-box">
+      <div id="gs-header">
+        <input id="gs-input" type="text" placeholder="Search in files…"
+               autocomplete="off" spellcheck="false">
+        <span id="gs-count"></span>
+      </div>
+      <div id="gs-results"></div>
+    </div>
+  </div>
+
+  <!-- New File Dialog -->
+  <div id="new-file" class="hidden">
+    <div id="new-file-backdrop"></div>
+    <div id="new-file-box">
+      <div id="new-file-header">New file in <strong id="new-file-folder"></strong></div>
+      <input id="new-file-input" type="text" placeholder="filename.py"
+             autocomplete="off" spellcheck="false">
+      <div id="new-file-hint">Enter to create &middot; Esc to cancel &middot; .py added if no extension</div>
+    </div>
+  </div>
+
+  <!-- Quick Open / Command Palette -->
+  <div id="quick-open" class="hidden">
+    <div id="quick-open-backdrop"></div>
+    <div id="quick-open-box">
+      <input id="quick-open-input" type="text"
+             placeholder="Search files…  (> for commands)"
+             autocomplete="off" spellcheck="false">
+      <div id="quick-open-list"></div>
+    </div>
+  </div>
+
+  <!-- Editor Context Menu -->
+  <div id="editor-ctx-menu" class="hidden">
+    <div class="ctx-item" id="edc-cut">Cut<span class="ctx-hint">Ctrl+X</span></div>
+    <div class="ctx-item" id="edc-copy">Copy<span class="ctx-hint">Ctrl+C</span></div>
+    <div class="ctx-item" id="edc-paste">Paste<span class="ctx-hint">Ctrl+V</span></div>
+    <div class="ctx-sep"></div>
+    <div class="ctx-item" id="edc-save">Save<span class="ctx-hint">Ctrl+S</span></div>
+    <div class="ctx-item" id="edc-run">Run<span class="ctx-hint">Ctrl+Enter</span></div>
+    <div class="ctx-sep" id="edc-sep2"></div>
+    <div class="ctx-item" id="edc-explain">Explain with AI</div>
+    <div class="ctx-item" id="edc-search">Search in files<span class="ctx-hint">Ctrl+Shift+F</span></div>
+  </div>
+
+  <!-- AI Explain Panel -->
+  <div id="ai-explain" class="hidden">
+    <div id="ai-explain-hdr">
+      <span id="ai-explain-label">AI Explanation</span>
+      <span id="ai-explain-badge"></span>
+      <span id="ai-explain-status"></span>
+      <button id="ai-explain-stop" class="hidden" title="Stop">■</button>
+      <button id="ai-explain-close" title="Close">×</button>
+    </div>
+    <pre id="ai-explain-snippet"></pre>
+    <div id="ai-explain-sep"></div>
+    <div id="ai-explain-response"></div>
+  </div>
+
+  <!-- Context Menu -->
+  <div id="ctx-menu" class="hidden">
+    <div class="ctx-item" id="ctx-new-file">New File</div>
+    <div class="ctx-item" id="ctx-new-folder">New Folder</div>
+    <div class="ctx-sep" id="ctx-sep"></div>
+    <div class="ctx-item" id="ctx-rename">Rename</div>
+    <div class="ctx-item ctx-danger" id="ctx-delete">Delete</div>
+  </div>
+
+  <!-- New Folder Dialog -->
+  <div id="new-folder" class="hidden">
+    <div id="new-folder-backdrop"></div>
+    <div id="new-folder-box">
+      <div id="new-folder-header">New folder in <strong id="new-folder-parent"></strong></div>
+      <input id="new-folder-input" type="text" placeholder="folder-name"
+             autocomplete="off" spellcheck="false">
+      <div id="new-folder-hint">Enter to create &middot; Esc to cancel</div>
+    </div>
+  </div>
+
+  <!-- Import hover tooltip -->
+  <div id="import-tooltip" class="hidden"></div>
+
+  <!-- Autocomplete dropdown -->
+  <div id="autocomplete" class="hidden"></div>
+
+  <script src="main.js"></script>
+</body>
+</html>

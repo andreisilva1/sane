@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Output — Sane</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      height: 100%;
+      background: #0e0e0e;
+      color: #c8c8c8;
+      font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+      font-size: 12px;
+      overflow: hidden;
+      user-select: none;
+    }
+
+    #container {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+    }
+
+    /* ── Header ── */
+    #fo-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 5px 10px;
+      background: #111;
+      border-bottom: 1px solid #1e1e1e;
+      flex-shrink: 0;
+      -webkit-app-region: drag;
+    }
+
+    #fo-status {
+      flex: 1;
+      font-size: 11px;
+      color: #444;
+      letter-spacing: 0.02em;
+      -webkit-app-region: no-drag;
+    }
+    #fo-status.running  { color: #5294e2; }
+    #fo-status.finished { color: #4ec94e; }
+    #fo-status.error    { color: #e06c75; }
+
+    #fo-duration {
+      font-size: 10px;
+      color: #383838;
+      -webkit-app-region: no-drag;
+    }
+
+    .fo-btn {
+      background: transparent;
+      border: none;
+      color: #3a3a3a;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 11px;
+      padding: 1px 5px;
+      line-height: 1;
+      transition: color 0.1s;
+      -webkit-app-region: no-drag;
+    }
+    .fo-btn:hover { color: #c8c8c8; }
+    #fo-close { font-size: 16px; padding: 0 4px; }
+
+    /* ── Output body ── */
+    #fo-output {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px 12px;
+      white-space: pre-wrap;
+      word-break: break-all;
+      line-height: 1.6;
+      user-select: text;
+    }
+
+    #fo-output::-webkit-scrollbar       { width: 4px; }
+    #fo-output::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 2px; }
+
+    .fo-empty   { color: #2e2e2e; font-style: italic; }
+    .fo-info    { color: #3a3a3a; font-style: italic; }
+    .fo-stdout  { color: #c8c8c8; }
+    .fo-stderr  { color: #e06c75; }
+    .fo-file    { color: #e5a550; font-size: 10px; display: block;
+                  margin-bottom: 4px; opacity: 0.7; }
+  </style>
+</head>
+<body>
+  <div id="container">
+    <div id="fo-header">
+      <span id="fo-status">—</span>
+      <span id="fo-duration"></span>
+      <button class="fo-btn" id="fo-clear" title="Clear">clear</button>
+      <button class="fo-btn" id="fo-close" title="Close">×</button>
+    </div>
+    <div id="fo-output">
+      <span class="fo-empty">Waiting for output…</span>
+    </div>
+  </div>
+
+  <script>
+    const elStatus   = document.getElementById('fo-status');
+    const elDuration = document.getElementById('fo-duration');
+    const elOutput   = document.getElementById('fo-output');
+
+    function setStatus(s, ms) {
+      elStatus.className = s;
+      elStatus.textContent =
+        s === 'running'  ? 'Running…' :
+        s === 'finished' ? 'Finished' :
+        s === 'error'    ? 'Error'    : '—';
+      elDuration.textContent =
+        ms != null ? (ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(2)}s`) : '';
+    }
+
+    function clearOutput() {
+      elOutput.innerHTML = '';
+    }
+
+    function append(cls, text) {
+      if (!text) return;
+      const el = document.createElement('span');
+      el.className   = cls;
+      el.textContent = text;
+      elOutput.appendChild(el);
+    }
+
+    document.getElementById('fo-clear').addEventListener('click', () => {
+      clearOutput();
+      setStatus('', null);
+    });
+
+    document.getElementById('fo-close').addEventListener('click', async () => {
+      const { getCurrentWindow } = window.__TAURI__.window;
+      await getCurrentWindow().close();
+    });
+
+    // ── Tauri event listeners ──────────────────────────────
+
+    (async () => {
+      const { listen }           = window.__TAURI__.event;
+      const { getCurrentWindow } = window.__TAURI__.window;
+
+      const win = getCurrentWindow();
+
+      // Enforce always-on-top (redundant safety)
+      try { await win.setAlwaysOnTop(true); } catch {}
+
+      // Save position/size to localStorage on move or resize
+      async function saveGeometry() {
+        try {
+          const pos  = await win.outerPosition();
+          const size = await win.outerSize();
+          localStorage.setItem('sane_float_geo_v1', JSON.stringify({
+            x: pos.x, y: pos.y, width: size.width, height: size.height,
+          }));
+        } catch {}
+      }
+
+      await win.listen('tauri://move',   saveGeometry);
+      await win.listen('tauri://resize', saveGeometry);
+
+      // Code started running
+      await listen('fo-status', (e) => {
+        const { status, file } = e.payload;
+        if (status !== 'running') return;
+        clearOutput();
+        if (file) {
+          append('fo-file', file.replace(/\\/g, '/').split('/').pop());
+        }
+        append('fo-info', 'Running…\n');
+        setStatus('running', null);
+      });
+
+      // Code finished — render output
+      await listen('fo-result', (e) => {
+        const { status, stdout, stderr, duration } = e.payload;
+        clearOutput();
+        if (stdout)            append('fo-stdout', stdout);
+        if (stderr)            append('fo-stderr', stderr);
+        if (!stdout && !stderr) append('fo-info', '(no output)\n');
+        setStatus(status, duration);
+        elOutput.scrollTop = elOutput.scrollHeight;
+      });
+    })();
+  </script>
+</body>
+</html>

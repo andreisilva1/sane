@@ -1,0 +1,21 @@
+# Node
+node_modules/
+npm-debug.log*
+
+# Rust / Tauri build output
+src-tauri/target/
+
+# Compiled binaries (rebuild from source)
+backend/sane-backend.exe
+src-tauri/binaries/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
