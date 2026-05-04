@@ -1,249 +1,346 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="utf-8">
   <title>Sane</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div id="app">
+  <div id="header">
+    <button id="btn-sidebar" title="Toggle explorer">⊟</button>
+    <button id="btn-open">Open Folder</button>
+    <span id="folder-name"></span>
+    <span id="header-sep" class="hidden">·</span>
+    <span id="current-file"></span>
+    <div id="header-right">
+      <button id="ai-badge">Configurar IA</button>
+      <button id="btn-run" class="hidden" title="Run (Ctrl+Enter)">▶ Run</button>
+      <button id="btn-run-stop" class="hidden btn-danger" title="Stop">■ Stop</button>
+      <button id="btn-save" disabled>Save</button>
+    </div>
+  </div>
+
+  <div id="layout">
     <div id="sidebar">
-      <div id="sidebar-header">
-        <div id="sidebar-actions">
-          <button id="btn-open">Open Folder</button>
-          <button id="btn-terminal" title="Terminal (Ctrl+`)">&#x276F;_</button>
-        </div>
-        <span id="folder-name"></span>
-      </div>
       <div id="file-tree"></div>
     </div>
-    <div id="editor-area">
-      <div id="editor-header">
-        <span id="current-file">no file open</span>
-        <div id="editor-actions">
-          <span id="py-env" class="hidden"></span>
-          <button id="btn-run" class="hidden">&#x25B6; Run</button>
-          <button id="btn-save" disabled>Save</button>
-          <span id="save-indicator"></span>
-          <span id="ai-indicator" class="hidden"></span>
-          <button id="btn-ai">AI</button>
-        </div>
-      </div>
-      <div id="editor-body">
+    <div id="sidebar-resizer"></div>
+    <div id="main">
+      <div id="editor-wrap">
         <div id="line-numbers"></div>
-        <div id="editor-wrap">
-          <div id="line-highlight"></div>
-          <div id="error-highlight"></div>
-          <div id="editor-highlight" aria-hidden="true"></div>
-          <textarea id="editor" placeholder="Select a file to edit..." spellcheck="false"></textarea>
+        <div id="editor-area">
+          <div id="refs-panel" class="hidden"></div>
+          <textarea id="editor"
+                    spellcheck="false"
+                    autocorrect="off"
+                    autocapitalize="off"
+                    placeholder="Open a folder, then click a file to edit."></textarea>
         </div>
-      </div>
-    </div>
-    <div id="terminal-panel" class="hidden">
-      <div id="term-header">
-        <span id="term-title">Terminal</span>
-        <span id="term-cwd"></span>
-        <button id="term-clear">Clear</button>
-        <button id="term-close" title="Close">×</button>
-      </div>
-      <div id="term-output"></div>
-      <div id="term-input-row">
-        <span id="term-prompt">$</span>
-        <input id="term-input" type="text" spellcheck="false" autocomplete="off"
-               placeholder="command…">
-      </div>
-    </div>
-    <div id="output-panel" class="hidden">
-      <div id="output-header">
-        <span id="output-title">Output</span>
-        <span id="output-status"></span>
-        <button id="btn-stop-run" class="hidden" title="Stop (Ctrl+Shift+K)">■ Stop</button>
-        <button id="btn-popout" title="Pop-out (Ctrl+Shift+O)">↗</button>
-        <button id="output-close" title="Close">×</button>
-      </div>
-      <div id="output-body"></div>
-    </div>
-  </div>
-  <!-- Grid Editor (Ctrl+Alt+G) -->
-  <div id="grid-editor" class="hidden">
-    <div id="ge-backdrop"></div>
-    <div id="ge-box">
-      <div id="ge-header">
-        <span id="ge-title">Grid Editor</span>
-        <span id="ge-hint">Drag components · Drop on mesa to hide</span>
-        <div id="ge-btns">
-          <button id="ge-reset">Reset</button>
-          <button id="ge-export">Export JSON</button>
-          <button id="ge-cancel">Cancel</button>
-          <button id="ge-save">Save</button>
-        </div>
-      </div>
-      <div id="ge-canvas"><!-- cells + tiles built by JS --></div>
-      <div id="ge-mesa">
-        <span id="ge-mesa-label">Mesa</span>
-        <div id="ge-mesa-items"></div>
       </div>
     </div>
   </div>
 
-  <!-- Theme panel (Ctrl+,) -->
-  <div id="theme-panel" class="hidden">
-    <div id="theme-backdrop"></div>
-    <div id="theme-box">
-      <div id="theme-hdr">
-        <span>Theme</span>
-        <button id="theme-close">×</button>
-      </div>
-      <div id="theme-presets">
-        <button class="tpreset active" data-p="default">Default</button>
-        <button class="tpreset" data-p="black">Black</button>
-        <button class="tpreset" data-p="white">White</button>
-        <button class="tpreset" data-p="custom">Custom</button>
-      </div>
-      <div id="theme-colors"><!-- built by JS --></div>
-      <div id="theme-footer">
-        <button id="theme-reset">Reset</button>
-        <button id="theme-export">Export</button>
-        <label id="theme-import-btn">Import<input type="file" id="theme-import" accept=".json"></label>
-      </div>
-    </div>
-  </div>
-
-  <!-- AI Plugin Install Widget (bottom-right corner) -->
-  <div id="ai-install" class="hidden">
-    <div id="aii-header">
-      <span>AI Plugin</span>
-      <button id="aii-dismiss" title="Dismiss">×</button>
-    </div>
-    <div id="aii-body">
-      <p id="aii-message">Ollama not found. Run in PowerShell:</p>
-      <div id="aii-cmd">
-        <code id="aii-cmd-text">irm https://ollama.com/install.ps1 | iex</code>
-        <button id="aii-copy" title="Copy">⎘</button>
-      </div>
-      <span id="aii-hint">Then click AI again to continue.</span>
-    </div>
+  <!-- File ops context menu -->
+  <div id="fo-menu" class="hidden">
+    <div class="fo-item" id="fo-new-file">New File</div>
+    <div class="fo-item" id="fo-new-folder">New Folder</div>
+    <div class="fo-sep fo-sep-rename hidden"></div>
+    <div class="fo-item fo-sep-rename hidden" id="fo-rename">Rename</div>
+    <div class="fo-item fo-danger fo-sep-rename hidden" id="fo-delete">Delete</div>
   </div>
 
   <!-- AI Panel -->
   <div id="ai-panel" class="hidden">
-    <div id="ai-backdrop"></div>
-    <div id="ai-box">
-      <div id="ai-header">
-        <span id="ai-title">AI Models</span>
-        <span id="ai-ollama-status"></span>
+    <div id="ai-resizer"></div>
+    <div id="ai-header">
+      <span id="ai-title">AI</span>
+      <div id="ai-tier-wrap">
+        <button id="ai-tier-btn" title="Switch AI model">Set up AI</button>
+        <div id="ai-tier-menu" class="hidden"></div>
       </div>
-      <div id="ai-model-list"></div>
+      <button id="ai-close" title="Close">×</button>
+    </div>
+    <div id="ai-messages"></div>
+    <div id="ai-footer">
+      <div id="ai-status"></div>
+      <label id="ai-ctx-label">
+        <input type="checkbox" id="ai-ctx"> include file
+      </label>
+      <div id="ai-input-row">
+        <textarea id="ai-input" placeholder="Ask anything… (Enter to send, Shift+Enter for newline)" rows="2"></textarea>
+        <button id="ai-send" title="Send">↑</button>
+      </div>
     </div>
   </div>
 
-  <!-- Global Search (Ctrl+Shift+F) -->
-  <div id="global-search" class="hidden">
-    <div id="gs-backdrop"></div>
+  <!-- Task Mode overlay -->
+  <div id="tm-overlay" class="hidden">
+    <div id="tm-box">
+      <div id="tm-header">
+        <div id="tm-title">Task Mode <span id="tm-filename"></span></div>
+        <button id="tm-close">×</button>
+      </div>
+      <textarea id="tm-task" placeholder="Describe what to do… e.g. 'Add type hints to all functions' (Ctrl+Enter to plan)"></textarea>
+      <div id="tm-actions">
+        <span id="tm-status"></span>
+        <div style="display:flex;gap:6px">
+          <button id="tm-plan-btn">Plan</button>
+          <button id="tm-apply-btn" class="hidden">Apply Changes</button>
+        </div>
+      </div>
+      <div id="tm-plan-box" class="hidden">
+        <div id="tm-plan-text"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Global Search overlay -->
+  <div id="gs-overlay" class="hidden">
     <div id="gs-box">
       <div id="gs-header">
-        <input id="gs-input" type="text" placeholder="Search in files…"
-               autocomplete="off" spellcheck="false">
+        <input id="gs-input" type="text" placeholder="Search in files…" spellcheck="false" autocomplete="off">
         <span id="gs-count"></span>
       </div>
       <div id="gs-results"></div>
     </div>
   </div>
 
-  <!-- New File Dialog -->
-  <div id="new-file" class="hidden">
-    <div id="new-file-backdrop"></div>
-    <div id="new-file-box">
-      <div id="new-file-header">New file in <strong id="new-file-folder"></strong></div>
-      <input id="new-file-input" type="text" placeholder="filename.py"
-             autocomplete="off" spellcheck="false">
-      <div id="new-file-hint">Enter to create &middot; Esc to cancel &middot; .py added if no extension</div>
+  <!-- Quick Open overlay -->
+  <div id="qo-overlay" class="hidden">
+    <div id="qo-box">
+      <input id="qo-input" type="text" placeholder="Search files…" spellcheck="false" autocomplete="off">
+      <div id="qo-list"></div>
     </div>
   </div>
 
-  <!-- Quick Open / Command Palette -->
-  <div id="quick-open" class="hidden">
-    <div id="quick-open-backdrop"></div>
-    <div id="quick-open-box">
-      <input id="quick-open-input" type="text"
-             placeholder="Search files…  (> for commands)"
-             autocomplete="off" spellcheck="false">
-      <div id="quick-open-list"></div>
-    </div>
-  </div>
-
-  <!-- Editor Context Menu -->
-  <div id="editor-ctx-menu" class="hidden">
-    <div class="ctx-item" id="edc-cut">Cut<span class="ctx-hint">Ctrl+X</span></div>
-    <div class="ctx-item" id="edc-copy">Copy<span class="ctx-hint">Ctrl+C</span></div>
-    <div class="ctx-item" id="edc-paste">Paste<span class="ctx-hint">Ctrl+V</span></div>
-    <div class="ctx-sep"></div>
-    <div class="ctx-item" id="edc-save">Save<span class="ctx-hint">Ctrl+S</span></div>
-    <div class="ctx-item" id="edc-run">Run<span class="ctx-hint">Ctrl+Enter</span></div>
-    <div class="ctx-sep" id="edc-sep2"></div>
-    <div class="ctx-item" id="edc-explain">Explain with AI</div>
-    <div class="ctx-item" id="edc-search">Search in files<span class="ctx-hint">Ctrl+Shift+F</span></div>
-  </div>
-
-  <!-- Quick Fix Preview (quick_fix_v1) -->
-  <div id="quick-fix" class="hidden">
-    <div id="qf-backdrop"></div>
-    <div id="qf-box">
-      <div id="qf-header">
-        <span id="qf-title">Quick Fix</span>
-        <span id="qf-badge"></span>
-        <button id="qf-close" title="Cancel (Esc)">×</button>
-      </div>
-      <div id="qf-label"></div>
-      <div id="qf-diff"></div>
-      <div id="qf-footer">
-        <button id="qf-cancel">Cancel</button>
-        <button id="qf-apply">Apply Fix</button>
+  <!-- File ops name dialog -->
+  <div id="fo-dialog" class="hidden">
+    <div id="fo-backdrop"></div>
+    <div id="fo-box">
+      <div id="fo-title"></div>
+      <input id="fo-input" type="text" spellcheck="false" autocomplete="off">
+      <div id="fo-actions">
+        <div id="fo-hint">Esc to cancel</div>
+        <button id="fo-confirm">OK</button>
       </div>
     </div>
   </div>
 
-  <!-- AI Explain Panel -->
-  <div id="ai-explain" class="hidden">
-    <div id="ai-explain-hdr">
-      <span id="ai-explain-label">AI Explanation</span>
-      <span id="ai-explain-badge"></span>
-      <span id="ai-explain-status"></span>
-      <button id="ai-explain-stop" class="hidden" title="Stop">■</button>
-      <button id="ai-explain-close" title="Close">×</button>
+  <!-- Terminal panel -->
+  <div id="term-panel" class="hidden">
+    <div id="term-header">
+      <span id="term-title">Terminal</span>
+      <button id="term-clear" title="Clear">Clear</button>
+      <button id="term-close" title="Close">×</button>
     </div>
-    <pre id="ai-explain-snippet"></pre>
-    <div id="ai-explain-sep"></div>
-    <div id="ai-explain-response"></div>
-  </div>
-
-  <!-- Context Menu -->
-  <div id="ctx-menu" class="hidden">
-    <div class="ctx-item" id="ctx-new-file">New File</div>
-    <div class="ctx-item" id="ctx-new-folder">New Folder</div>
-    <div class="ctx-sep" id="ctx-sep"></div>
-    <div class="ctx-item" id="ctx-rename">Rename</div>
-    <div class="ctx-item ctx-danger" id="ctx-delete">Delete</div>
-  </div>
-
-  <!-- New Folder Dialog -->
-  <div id="new-folder" class="hidden">
-    <div id="new-folder-backdrop"></div>
-    <div id="new-folder-box">
-      <div id="new-folder-header">New folder in <strong id="new-folder-parent"></strong></div>
-      <input id="new-folder-input" type="text" placeholder="folder-name"
-             autocomplete="off" spellcheck="false">
-      <div id="new-folder-hint">Enter to create &middot; Esc to cancel</div>
+    <div id="term-body"></div>
+    <div id="term-input-row">
+      <span id="term-prompt">$</span>
+      <input id="term-input" type="text" spellcheck="false" autocomplete="off" placeholder="Enter command…">
     </div>
   </div>
 
-  <!-- Import hover tooltip -->
-  <div id="import-tooltip" class="hidden"></div>
+  <!-- Output panel (runner) -->
+  <div id="output-panel" class="hidden">
+    <div id="output-header">
+      <span id="output-title">Output</span>
+      <span id="output-venv"></span>
+      <span id="output-elapsed"></span>
+      <button id="output-close" title="Close">×</button>
+    </div>
+    <div id="output-body"></div>
+  </div>
 
-  <!-- Autocomplete dropdown -->
-  <div id="autocomplete" class="hidden"></div>
+  <div id="status-bar">
+    <span id="status-msg"></span>
+    <button id="btn-shortcuts" title="Keyboard shortcuts">?</button>
+  </div>
+
+  <!-- Shortcuts overlay -->
+  <div id="kb-overlay" class="hidden">
+    <div id="kb-box">
+      <div id="kb-header">
+        <span>Keyboard Shortcuts</span>
+        <button id="kb-close">×</button>
+      </div>
+      <div id="kb-list">
+        <div class="kb-section">Editor</div>
+        <div class="kb-row"><kbd>Ctrl</kbd><kbd>Z</kbd><span>Undo</span></div>
+        <div class="kb-row"><kbd>Ctrl</kbd><kbd>Y</kbd><span>Redo</span></div>
+        <div class="kb-row"><kbd>Ctrl</kbd><kbd>S</kbd><span>Save file</span></div>
+        <div class="kb-row"><kbd>Ctrl</kbd><kbd>Enter</kbd><span>Run Python file</span></div>
+        <div class="kb-row"><kbd>Tab</kbd><span>Accept autocomplete</span></div>
+        <div class="kb-row"><kbd>Shift</kbd><kbd>Enter</kbd><span>New line (AI input)</span></div>
+
+        <div class="kb-section">Navigation</div>
+        <div class="kb-row"><kbd>Ctrl</kbd><kbd>P</kbd><span>Quick Open</span></div>
+        <div class="kb-row"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>F</kbd><span>Search in files</span></div>
+        <div class="kb-row"><kbd>F12</kbd><span>Go to Definition</span></div>
+        <div class="kb-row"><kbd>Shift</kbd><kbd>F12</kbd><span>Find References</span></div>
+        <div class="kb-row"><kbd>Ctrl</kbd><kbd>Alt</kbd><kbd>←</kbd><span>Navigate back</span></div>
+        <div class="kb-row"><kbd>Ctrl</kbd><kbd>Alt</kbd><kbd>→</kbd><span>Navigate forward</span></div>
+
+        <div class="kb-section">Panels</div>
+        <div class="kb-row"><kbd>Ctrl</kbd><kbd>`</kbd><span>Toggle terminal</span></div>
+        <div class="kb-row"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>A</kbd><span>Toggle AI panel</span></div>
+        <div class="kb-row"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>I</kbd><span>AI Refactor</span></div>
+        <div class="kb-row"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>C</kbd><span>Project Context</span></div>
+        <div class="kb-row"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>M</kbd><span>Project Memory</span></div>
+        <div class="kb-row"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>E</kbd><span>Extract Function</span></div>
+        <div class="kb-row"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>L</kbd><span>Inline Variable</span></div>
+
+        <div class="kb-section">Sidebar</div>
+        <div class="kb-row"><kbd>Right-click</kbd><span>New file / folder / rename / delete</span></div>
+
+        <div class="kb-section">Terminal</div>
+        <div class="kb-row"><kbd>↑</kbd><kbd>↓</kbd><span>Command history</span></div>
+        <div class="kb-row"><kbd>cls</kbd> / <kbd>clear</kbd><span>Clear output</span></div>
+
+        <div class="kb-row"><kbd>F2</kbd><span>Rename symbol</span></div>
+
+        <div class="kb-section">General</div>
+        <div class="kb-row"><kbd>Ctrl</kbd><kbd>,</kbd><span>Theme</span></div>
+        <div class="kb-row"><kbd>Escape</kbd><span>Close any panel or overlay</span></div>
+      </div>
+    </div>
+  </div>
 
   <script src="main.js"></script>
+  <script src="modules/history.js"></script>
+  <script src="modules/runner.js"></script>
+  <script src="modules/linenumbers.js"></script>
+  <script src="modules/highlight.js"></script>
+  <script src="modules/fileops.js"></script>
+  <script src="modules/quickopen.js"></script>
+  <script src="modules/search.js"></script>
+  <script src="modules/terminal.js"></script>
+  <script src="modules/autocomplete.js"></script>
+  <script src="modules/error_insight.js"></script>
+  <script src="modules/quickfix.js"></script>
+  <!-- Project Context overlay -->
+  <div id="ctx-overlay" class="hidden">
+    <div id="ctx-box">
+      <div id="ctx-header">
+        <span id="ctx-title">Project Context</span>
+        <button id="ctx-close">×</button>
+      </div>
+      <div id="ctx-body">
+        <div id="ctx-empty">No files pinned. Pin files to include them in every AI message.</div>
+        <div id="ctx-list"></div>
+      </div>
+      <div id="ctx-footer">
+        <button id="ctx-pin-btn">+ Pin current file</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Extract Function widget (fixed top-right) -->
+  <div id="ef-widget" class="hidden">
+    <div id="ef-header">Extract Function</div>
+    <div id="ef-fields">
+      <input id="ef-name"  type="text" placeholder="Function name" spellcheck="false" autocomplete="off">
+      <input id="ef-param" type="text" placeholder="Parameters (optional)" spellcheck="false" autocomplete="off">
+    </div>
+    <div id="ef-footer">
+      <span id="ef-status"></span>
+      <div style="display:flex;gap:4px">
+        <button id="ef-cancel">Cancel</button>
+        <button id="ef-apply">Extract</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Rename widget (fixed top-right, shown over editor) -->
+  <div id="rn-widget" class="hidden">
+    <div id="rn-header">Rename &nbsp;<span id="rn-old"></span></div>
+    <input id="rn-input" type="text" spellcheck="false" autocomplete="off">
+    <div id="rn-footer">
+      <span id="rn-count"></span>
+      <div style="display:flex;gap:4px">
+        <button id="rn-cancel">Cancel</button>
+        <button id="rn-confirm">Apply</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- AI Refactor overlay -->
+  <div id="arf-overlay" class="hidden">
+    <div id="arf-box">
+      <div id="arf-header">
+        <span id="arf-title">Refactor &mdash; <span id="arf-filename"></span></span>
+        <button id="arf-close">×</button>
+      </div>
+      <textarea id="arf-input" placeholder="Describe the refactoring… (Ctrl+Enter to run)" rows="2"></textarea>
+      <div id="arf-actions">
+        <span id="arf-status"></span>
+        <div style="display:flex;gap:6px">
+          <button id="arf-run-btn">Refactor</button>
+          <button id="arf-apply-btn" class="hidden">Apply &amp; Save</button>
+        </div>
+      </div>
+      <div id="arf-diff"></div>
+    </div>
+  </div>
+
+  <!-- AI Setup overlay -->
+  <div id="ais-overlay" class="hidden">
+    <div id="ais-box">
+      <div id="ais-header">
+        <span id="ais-title">Set Up Local AI</span>
+        <button id="ais-close">×</button>
+      </div>
+      <div id="ais-ollama-warn" class="hidden">
+        <span>⚠ Ollama not found. <a href="https://ollama.com" target="_blank">Install Ollama</a> and restart the editor.</span>
+      </div>
+      <div id="ais-cards"></div>
+    </div>
+  </div>
+
+  <script src="modules/ai_panel.js"></script>
+  <script src="modules/ai_inline.js"></script>
+  <script src="modules/task_mode.js"></script>
+  <script src="modules/code_nav.js"></script>
+  <script src="modules/rename_symbol.js"></script>
+  <script src="modules/project_context.js"></script>
+  <script src="modules/ai_refactor.js"></script>
+  <script src="modules/ai_setup.js"></script>
+
+  <!-- Project Memory overlay -->
+  <div id="mem-overlay" class="hidden">
+    <div id="mem-box">
+      <div id="mem-header">
+        <span id="mem-title">Project Memory</span>
+        <button id="mem-close">×</button>
+      </div>
+      <div id="mem-body">
+        <div id="mem-empty">No memory entries. Add notes to include in every AI message.</div>
+        <div id="mem-list"></div>
+      </div>
+      <div id="mem-footer">
+        <div id="mem-input-row">
+          <input id="mem-input" type="text" placeholder="Add a note… (Enter to save)" spellcheck="false" autocomplete="off">
+          <button id="mem-add-btn">Add</button>
+        </div>
+        <div id="mem-status"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="modules/project_memory.js"></script>
+  <script src="modules/refactor_tools.js"></script>
+
+  <!-- Theme Panel overlay -->
+  <div id="tp-overlay" class="hidden">
+    <div id="tp-box">
+      <div id="tp-header">
+        <span id="tp-title">Theme</span>
+        <button id="tp-close">×</button>
+      </div>
+      <div id="tp-cards"></div>
+    </div>
+  </div>
+
+  <script src="modules/theme_panel.js"></script>
+  <script src="modules/resize.js"></script>
 </body>
 </html>
