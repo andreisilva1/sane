@@ -8,12 +8,14 @@
 <body>
   <div id="header">
     <button id="btn-sidebar" title="Toggle explorer">⊟</button>
+    <button id="btn-shortcuts" title="Keyboard shortcuts">?</button>
     <button id="btn-open">Open Folder</button>
     <span id="folder-name"></span>
     <span id="header-sep" class="hidden">·</span>
     <span id="current-file"></span>
     <div id="header-right">
-      <button id="ai-badge">Configurar IA</button>
+      <button id="btn-preview" class="hidden" title="Preview HTML (Ctrl+Shift+V)">◧ Preview</button>
+      <button id="btn-trace" class="hidden" title="Run &amp; trace execution (Python only)">⏱ Trace</button>
       <button id="btn-run" class="hidden" title="Run (Ctrl+Enter)">▶ Run</button>
       <button id="btn-run-stop" class="hidden btn-danger" title="Stop">■ Stop</button>
       <button id="btn-save" disabled>Save</button>
@@ -54,6 +56,7 @@
     <div id="ai-resizer"></div>
     <div id="ai-header">
       <span id="ai-title">AI</span>
+      <button id="ai-pb-toggle" title="Project Builder (Ctrl+Shift+B)">+ Builder</button>
       <div id="ai-tier-wrap">
         <button id="ai-tier-btn" title="Switch AI model">Set up AI</button>
         <div id="ai-tier-menu" class="hidden"></div>
@@ -105,6 +108,14 @@
     </div>
   </div>
 
+  <!-- Command Palette -->
+  <div id="cp-overlay" class="hidden">
+    <div id="cp-box">
+      <input id="cp-input" type="text" placeholder="Type a command…" spellcheck="false" autocomplete="off">
+      <div id="cp-list"></div>
+    </div>
+  </div>
+
   <!-- Quick Open overlay -->
   <div id="qo-overlay" class="hidden">
     <div id="qo-box">
@@ -126,34 +137,44 @@
     </div>
   </div>
 
-  <!-- Terminal panel -->
+  <!-- Terminal + Output panel (tabbed) -->
   <div id="term-panel" class="hidden">
     <div id="term-header">
-      <span id="term-title">Terminal</span>
-      <button id="term-clear" title="Clear">Clear</button>
+      <div id="term-tabs"></div>
+      <button id="term-new-btn" title="New terminal">+</button>
+      <button id="term-clear" title="Clear active pane">Clear</button>
       <button id="term-close" title="Close">×</button>
     </div>
-    <div id="term-body"></div>
-    <div id="term-input-row">
-      <span id="term-prompt">$</span>
-      <input id="term-input" type="text" spellcheck="false" autocomplete="off" placeholder="Enter command…">
+    <!-- Output pane (tab content) -->
+    <div id="output-pane" class="term-pane hidden">
+      <div id="output-meta-row">
+        <span id="output-venv"></span>
+        <span id="output-elapsed"></span>
+      </div>
+      <div id="output-body"></div>
+      <div id="sh-bar" class="hidden">
+        <div id="sh-header">
+          <span id="sh-title">🔧 Fix available</span>
+          <button id="sh-dismiss" title="Dismiss">×</button>
+        </div>
+        <div id="sh-fixes"></div>
+      </div>
+      <div id="ri-bar" class="hidden">
+        <div id="ri-label">✔ Run Insight <span id="ri-chevron">▾</span></div>
+        <div id="ri-body"><div id="ri-text"></div></div>
+      </div>
+      <div id="output-stdin-row" class="hidden">
+        <span id="output-stdin-prompt">›</span>
+        <input id="output-stdin" type="text" spellcheck="false" autocomplete="off" placeholder="stdin — Enter to send">
+      </div>
     </div>
-  </div>
-
-  <!-- Output panel (runner) -->
-  <div id="output-panel" class="hidden">
-    <div id="output-header">
-      <span id="output-title">Output</span>
-      <span id="output-venv"></span>
-      <span id="output-elapsed"></span>
-      <button id="output-close" title="Close">×</button>
-    </div>
-    <div id="output-body"></div>
+    <!-- Terminal session panes added dynamically -->
+    <div id="term-sessions"></div>
   </div>
 
   <div id="status-bar">
     <span id="status-msg"></span>
-    <button id="btn-shortcuts" title="Keyboard shortcuts">?</button>
+    <button id="ai-badge">Set up AI</button>
   </div>
 
   <!-- Shortcuts overlay -->
@@ -164,43 +185,55 @@
         <button id="kb-close">×</button>
       </div>
       <div id="kb-list">
+        <div class="kb-section">General</div>
+        <div class="kb-row"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>P</kbd><span>Command Palette</span></div>
+        <div class="kb-row"><kbd>Escape</kbd><span>Close any panel or overlay</span></div>
+
         <div class="kb-section">Editor</div>
         <div class="kb-row"><kbd>Ctrl</kbd><kbd>Z</kbd><span>Undo</span></div>
         <div class="kb-row"><kbd>Ctrl</kbd><kbd>Y</kbd><span>Redo</span></div>
         <div class="kb-row"><kbd>Ctrl</kbd><kbd>S</kbd><span>Save file</span></div>
-        <div class="kb-row"><kbd>Ctrl</kbd><kbd>Enter</kbd><span>Run Python file</span></div>
-        <div class="kb-row"><kbd>Tab</kbd><span>Accept autocomplete</span></div>
-        <div class="kb-row"><kbd>Shift</kbd><kbd>Enter</kbd><span>New line (AI input)</span></div>
+        <div class="kb-row"><kbd>Ctrl</kbd><kbd>Enter</kbd><span>Run Python / JS file</span></div>
+        <div class="kb-row"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>V</kbd><span>Preview HTML file</span></div>
+        <div class="kb-row"><kbd>Tab</kbd><span>Accept autocomplete / indent</span></div>
 
         <div class="kb-section">Navigation</div>
-        <div class="kb-row"><kbd>Ctrl</kbd><kbd>P</kbd><span>Quick Open</span></div>
+        <div class="kb-row"><kbd>Ctrl</kbd><kbd>P</kbd><span>Quick Open file</span></div>
         <div class="kb-row"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>F</kbd><span>Search in files</span></div>
         <div class="kb-row"><kbd>F12</kbd><span>Go to Definition</span></div>
         <div class="kb-row"><kbd>Shift</kbd><kbd>F12</kbd><span>Find References</span></div>
+        <div class="kb-row"><kbd>F2</kbd><span>Rename symbol</span></div>
         <div class="kb-row"><kbd>Ctrl</kbd><kbd>Alt</kbd><kbd>←</kbd><span>Navigate back</span></div>
         <div class="kb-row"><kbd>Ctrl</kbd><kbd>Alt</kbd><kbd>→</kbd><span>Navigate forward</span></div>
+
+        <div class="kb-section">Focus</div>
+        <div class="kb-row"><kbd>Ctrl</kbd><kbd>1</kbd><span>Focus editor</span></div>
+        <div class="kb-row"><kbd>Ctrl</kbd><kbd>2</kbd><span>Focus file explorer</span></div>
+        <div class="kb-row"><kbd>Ctrl</kbd><kbd>3</kbd><span>Focus terminal</span></div>
+        <div class="kb-row"><kbd>Ctrl</kbd><kbd>B</kbd><span>Toggle sidebar</span></div>
+
+        <div class="kb-section">File Explorer</div>
+        <div class="kb-row"><kbd>↑</kbd><kbd>↓</kbd><span>Navigate items</span></div>
+        <div class="kb-row"><kbd>→</kbd><span>Expand folder</span></div>
+        <div class="kb-row"><kbd>←</kbd><span>Collapse folder</span></div>
+        <div class="kb-row"><kbd>Enter</kbd><span>Open file / toggle folder</span></div>
+        <div class="kb-row"><kbd>Shift</kbd><kbd>F10</kbd><span>Context menu (new / rename / delete)</span></div>
 
         <div class="kb-section">Panels</div>
         <div class="kb-row"><kbd>Ctrl</kbd><kbd>`</kbd><span>Toggle terminal</span></div>
         <div class="kb-row"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>A</kbd><span>Toggle AI panel</span></div>
+        <div class="kb-row"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>B</kbd><span>Project Builder</span></div>
         <div class="kb-row"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>I</kbd><span>AI Refactor</span></div>
         <div class="kb-row"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>C</kbd><span>Project Context</span></div>
         <div class="kb-row"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>M</kbd><span>Project Memory</span></div>
         <div class="kb-row"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>E</kbd><span>Extract Function</span></div>
         <div class="kb-row"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>L</kbd><span>Inline Variable</span></div>
-
-        <div class="kb-section">Sidebar</div>
-        <div class="kb-row"><kbd>Right-click</kbd><span>New file / folder / rename / delete</span></div>
+        <div class="kb-row"><kbd>Ctrl</kbd><kbd>,</kbd><span>Theme</span></div>
 
         <div class="kb-section">Terminal</div>
         <div class="kb-row"><kbd>↑</kbd><kbd>↓</kbd><span>Command history</span></div>
+        <div class="kb-row"><kbd>Shift</kbd><kbd>Enter</kbd><span>New line (AI input)</span></div>
         <div class="kb-row"><kbd>cls</kbd> / <kbd>clear</kbd><span>Clear output</span></div>
-
-        <div class="kb-row"><kbd>F2</kbd><span>Rename symbol</span></div>
-
-        <div class="kb-section">General</div>
-        <div class="kb-row"><kbd>Ctrl</kbd><kbd>,</kbd><span>Theme</span></div>
-        <div class="kb-row"><kbd>Escape</kbd><span>Close any panel or overlay</span></div>
       </div>
     </div>
   </div>
@@ -298,6 +331,7 @@
 
   <script src="modules/ai_panel.js"></script>
   <script src="modules/ai_inline.js"></script>
+  <script src="modules/intent_detection.js"></script>
   <script src="modules/task_mode.js"></script>
   <script src="modules/code_nav.js"></script>
   <script src="modules/rename_symbol.js"></script>
@@ -342,5 +376,43 @@
 
   <script src="modules/theme_panel.js"></script>
   <script src="modules/resize.js"></script>
+
+  <script src="modules/project_builder.js"></script>
+
+  <!-- HTML Preview panel -->
+  <div id="preview-panel" class="hidden">
+    <div id="preview-header">
+      <span id="preview-title">Preview</span>
+      <button id="preview-refresh" title="Refresh">↺</button>
+      <button id="preview-close" title="Close">×</button>
+    </div>
+    <iframe id="preview-frame" sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups"></iframe>
+  </div>
+
+  <!-- Execution Timeline panel -->
+  <div id="tl-panel" class="hidden" tabindex="-1">
+    <div id="tl-header">
+      <span id="tl-title">Timeline</span>
+      <span id="tl-info"></span>
+      <div id="tl-nav">
+        <button id="tl-prev" title="Previous step (←)">◁</button>
+        <div id="tl-scrub" title="Click to jump"></div>
+        <button id="tl-next" title="Next step (→)">▷</button>
+      </div>
+      <button id="tl-close" title="Close">×</button>
+    </div>
+    <div id="tl-warn" class="hidden">⚠ Trace limited to 1500 steps — script may be truncated</div>
+    <div id="tl-body">
+      <div id="tl-line"></div>
+      <div id="tl-vars"></div>
+      <div id="tl-out"></div>
+    </div>
+  </div>
+
+  <script src="modules/preview.js"></script>
+  <script src="modules/timeline.js"></script>
+  <script src="modules/command_palette.js"></script>
+  <script src="modules/self_healing.js"></script>
+  <script src="modules/run_insight.js"></script>
 </body>
 </html>

@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
@@ -494,10 +495,25 @@ func serveAIAsk(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := startOllamaIfNeeded(); err != nil {
+		http.Error(w, "ollama unavailable: "+err.Error(), http.StatusServiceUnavailable)
+		return
+	}
+
+	numThread := int(float64(runtime.NumCPU()) * 0.65)
+	if numThread < 2 {
+		numThread = 2
+	}
 	reqBody, _ := json.Marshal(map[string]any{
 		"model":  body.Model,
 		"prompt": body.Prompt,
 		"stream": true,
+		"options": map[string]any{
+			"num_ctx":     16384,
+			"num_predict": -1,
+			"temperature": 0.2,
+			"num_thread":  numThread,
+		},
 	})
 
 	resp, err := aiQueryClient.Post("http://localhost:11434/api/generate",
@@ -536,7 +552,13 @@ func serveAICheck(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]bool{"installed": checkOllamaCLI()})
 }
 
-// ── Shell execution ───────────────────────────────────────
+// ── Shell execution (streaming SSE + interactive stdin) ────
+
+type shellProc struct {
+	stdin io.WriteCloser
+}
+
+var shellProcs sync.Map // id → *shellProc
 
 func serveShell(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -546,13 +568,30 @@ func serveShell(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Cmd string
 		Cwd string
+		ID  string // client-generated session id
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Cmd == "" {
 		http.Error(w, "cmd required", http.StatusBadRequest)
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("X-Accel-Buffering", "no")
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+		return
+	}
+
+	var mu sync.Mutex
+	writeEvent := func(v any) {
+		data, _ := json.Marshal(v)
+		fmt.Fprintf(w, "data: %s\n\n", data)
+		flusher.Flush()
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
 	defer cancel()
 
 	var cmd *exec.Cmd
@@ -568,30 +607,94 @@ func serveShell(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
+	// Force UTF-8 so tools like rich/fastapi-cli don't crash when the pipe
+	// is not a real Windows console and the code page falls back to cp1252.
+	cmd.Env = append(os.Environ(), "PYTHONUTF8=1", "PYTHONIOENCODING=utf-8")
+
+	stdinPipe, err := cmd.StdinPipe()
+	if err != nil {
+		writeEvent(map[string]any{"type": "error", "text": err.Error()})
+		return
+	}
+
+	stdoutPipe, err := cmd.StdoutPipe()
+	if err != nil {
+		writeEvent(map[string]any{"type": "error", "text": err.Error()})
+		return
+	}
+	stderrPipe, err := cmd.StderrPipe()
+	if err != nil {
+		writeEvent(map[string]any{"type": "error", "text": err.Error()})
+		return
+	}
+
+	if err := cmd.Start(); err != nil {
+		writeEvent(map[string]any{"type": "error", "text": err.Error()})
+		return
+	}
+
+	// Register stdin pipe so /shell/stdin can write to it
+	sessID := body.ID
+	if sessID != "" {
+		shellProcs.Store(sessID, &shellProc{stdin: stdinPipe})
+		defer shellProcs.Delete(sessID)
+	}
 
 	start := time.Now()
-	err := cmd.Run()
-	dur := time.Since(start)
+
+	var wg sync.WaitGroup
+	streamPipe := func(pipe io.Reader, kind string) {
+		defer wg.Done()
+		scanner := bufio.NewScanner(pipe)
+		for scanner.Scan() {
+			mu.Lock()
+			writeEvent(map[string]any{"type": kind, "text": scanner.Text()})
+			mu.Unlock()
+		}
+	}
+	wg.Add(2)
+	go streamPipe(stdoutPipe, "stdout")
+	go streamPipe(stderrPipe, "stderr")
+	wg.Wait()
 
 	exitCode := 0
-	if err != nil {
+	if err := cmd.Wait(); err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			exitCode = exitErr.ExitCode()
-		} else if ctx.Err() == context.DeadlineExceeded {
+		} else if ctx.Err() != nil {
 			exitCode = -1
 		}
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]any{
-		"stdout":   stdout.String(),
-		"stderr":   stderr.String(),
+	writeEvent(map[string]any{
+		"type":     "done",
 		"exitCode": exitCode,
-		"duration": dur.Milliseconds(),
+		"duration": time.Since(start).Milliseconds(),
 	})
+}
+
+// serveShellStdin sends a line of text to a running shell process's stdin.
+func serveShellStdin(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var body struct {
+		ID    string
+		Input string
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.ID == "" {
+		http.Error(w, "id required", http.StatusBadRequest)
+		return
+	}
+	val, ok := shellProcs.Load(body.ID)
+	if !ok {
+		http.Error(w, "process not found", http.StatusNotFound)
+		return
+	}
+	proc := val.(*shellProc)
+	proc.stdin.Write([]byte(body.Input + "\n"))
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // ── Python execution ──────────────────────────────────────
@@ -626,6 +729,30 @@ func servePyEnv(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"python": python, "venv": label})
 }
 
+var runProcs sync.Map // id → *shellProc
+
+func serveRunStdin(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var body struct {
+		ID    string
+		Input string
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.ID == "" {
+		http.Error(w, "id required", http.StatusBadRequest)
+		return
+	}
+	val, ok := runProcs.Load(body.ID)
+	if !ok {
+		http.Error(w, "process not found", http.StatusNotFound)
+		return
+	}
+	val.(*shellProc).stdin.Write([]byte(body.Input + "\n"))
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func serveRun(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -634,19 +761,14 @@ func serveRun(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Path string
 		Root string
+		ID   string
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Path == "" {
 		http.Error(w, "path required", http.StatusBadRequest)
 		return
 	}
 
-	projectDir := body.Root
-	if projectDir == "" {
-		projectDir = filepath.Dir(body.Path)
-	}
-	python, venvLabel := findVenv(projectDir)
-
-	// SSE streaming so the client sees output line-by-line
+	// SSE streaming so the client sees output as it arrives.
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("X-Accel-Buffering", "no")
@@ -663,17 +785,40 @@ func serveRun(w http.ResponseWriter, r *http.Request) {
 		flusher.Flush()
 	}
 
-	// Send venv label before the process starts
-	mu.Lock()
-	writeEvent(map[string]any{"type": "info", "venv": venvLabel})
-	mu.Unlock()
+	// Build the command based on file type.
+	var cmd *exec.Cmd
+	ext := strings.ToLower(filepath.Ext(body.Path))
 
-	// r.Context() is cancelled when the client aborts the fetch — killing the process.
-	// -u forces unbuffered stdout/stderr so each print() reaches the pipe immediately.
-	cmd := exec.CommandContext(r.Context(), python, "-u", body.Path)
-	cmd.Dir = filepath.Dir(body.Path)
-	cmd.Env = append(os.Environ(), "PYTHONUNBUFFERED=1")
+	if ext == ".js" {
+		nodePath, err := exec.LookPath("node")
+		if err != nil {
+			writeEvent(map[string]any{"type": "error", "text": "Node.js not found — install from https://nodejs.org"})
+			writeEvent(map[string]any{"type": "done", "exitCode": 1, "duration": 0})
+			return
+		}
+		writeEvent(map[string]any{"type": "info", "venv": "node"})
+		cmd = exec.CommandContext(r.Context(), nodePath, body.Path)
+		cmd.Dir = filepath.Dir(body.Path)
+		cmd.Env = os.Environ()
+	} else {
+		// Python (default)
+		projectDir := body.Root
+		if projectDir == "" {
+			projectDir = filepath.Dir(body.Path)
+		}
+		python, venvLabel := findVenv(projectDir)
+		writeEvent(map[string]any{"type": "info", "venv": venvLabel})
+		// -u: unbuffered stdout/stderr so each print() reaches the pipe immediately.
+		cmd = exec.CommandContext(r.Context(), python, "-u", body.Path)
+		cmd.Dir = filepath.Dir(body.Path)
+		cmd.Env = append(os.Environ(), "PYTHONUNBUFFERED=1")
+	}
 
+	stdinPipe, err := cmd.StdinPipe()
+	if err != nil {
+		writeEvent(map[string]any{"type": "error", "text": err.Error()})
+		return
+	}
 	stdoutPipe, err := cmd.StdoutPipe()
 	if err != nil {
 		writeEvent(map[string]any{"type": "error", "text": err.Error()})
@@ -691,19 +836,40 @@ func serveRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Stream stdout and stderr concurrently
+	if body.ID != "" {
+		runProcs.Store(body.ID, &shellProc{stdin: stdinPipe})
+		defer runProcs.Delete(body.ID)
+	}
+
+	// Stream stdout and stderr concurrently.
+	// stdout is read in raw chunks so input() prompts (no trailing \n) appear immediately.
+	// stderr stays line-based since tracebacks always end with \n.
 	var wg sync.WaitGroup
-	streamPipe := func(scanner *bufio.Scanner, streamType string) {
+	wg.Add(2)
+	go func() {
 		defer wg.Done()
-		for scanner.Scan() {
+		buf := make([]byte, 4096)
+		for {
+			n, err := stdoutPipe.Read(buf)
+			if n > 0 {
+				mu.Lock()
+				writeEvent(map[string]any{"type": "stdout", "text": string(buf[:n])})
+				mu.Unlock()
+			}
+			if err != nil {
+				break
+			}
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		sc := bufio.NewScanner(stderrPipe)
+		for sc.Scan() {
 			mu.Lock()
-			writeEvent(map[string]any{"type": streamType, "text": scanner.Text()})
+			writeEvent(map[string]any{"type": "stderr", "text": sc.Text()})
 			mu.Unlock()
 		}
-	}
-	wg.Add(2)
-	go streamPipe(bufio.NewScanner(stdoutPipe), "stdout")
-	go streamPipe(bufio.NewScanner(stderrPipe), "stderr")
+	}()
 	wg.Wait()
 
 	exitCode := 0
@@ -722,11 +888,155 @@ func serveRun(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// ── HTML Preview ──────────────────────────────────────────
+// Registered at /preview-dir/ — the URL path suffix IS the absolute file path.
+// Example: GET /preview-dir/C:/site/index.html → serves C:/site/index.html
+// All relative asset paths resolve correctly because the base URL path mirrors
+// the filesystem hierarchy. file:/// URLs in HTML source are rewritten to use
+// this same handler so static absolute references also work.
+func servePreviewDir(w http.ResponseWriter, r *http.Request) {
+	suffix := strings.TrimPrefix(r.URL.Path, "/preview-dir/")
+	if suffix == "" {
+		http.Error(w, "path required", http.StatusBadRequest)
+		return
+	}
+
+	var filePath string
+	if runtime.GOOS == "windows" {
+		filePath = suffix // "C:/projects/site/style.css"
+	} else {
+		filePath = "/" + suffix // "/home/user/site/style.css"
+	}
+
+	ext := strings.ToLower(filepath.Ext(filePath))
+	if ext == ".html" || ext == ".htm" {
+		data, err := os.ReadFile(filePath)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+		// Rewrite file:/// absolute URLs to route through this same handler.
+		html := strings.ReplaceAll(string(data), "file:///", "http://localhost:7654/preview-dir/")
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Write([]byte(html))
+		return
+	}
+
+	f, err := os.Open(filePath)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	defer f.Close()
+	fi, err := f.Stat()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	http.ServeContent(w, r, filePath, fi.ModTime(), f)
+}
+
+// ── Execution Tracer ──────────────────────────────────────
+
+const tracerScript = `
+import sys, json, io, os, traceback as _tb
+
+MAX_STEPS = 1500
+TARGET = os.path.abspath(sys.argv[1])
+
+_steps = []
+_outbuf = io.StringIO()
+_real_stdout = sys.stdout
+sys.stdout = _outbuf
+
+def _safe_repr(v):
+    try:
+        if isinstance(v, (bool, type(None))): return repr(v)
+        if isinstance(v, (int, float)):       return repr(v)
+        s = repr(v)
+        return s if len(s) <= 120 else s[:117] + '…'
+    except: return '<?>'
+
+def _trace(frame, event, arg):
+    if len(_steps) >= MAX_STEPS:
+        sys.settrace(None)
+        return None
+    if event != 'line': return _trace
+    if os.path.abspath(frame.f_code.co_filename) != TARGET: return _trace
+    snap = {}
+    for k, v in frame.f_locals.items():
+        if k.startswith('_') or callable(v) or isinstance(v, type): continue
+        if isinstance(v, (int, float, str, bool, list, dict, tuple, type(None))):
+            snap[k] = _safe_repr(v)
+    _steps.append({'n': frame.f_lineno, 'v': snap, 'o': _outbuf.getvalue()})
+    return _trace
+
+_err = None
+try:
+    with open(TARGET, encoding='utf-8') as f: _src = f.read()
+    sys.settrace(_trace)
+    exec(compile(_src, TARGET, 'exec'), {'__name__': '__main__', '__file__': TARGET})
+except SystemExit: pass
+except Exception: _err = _tb.format_exc()
+finally:
+    sys.settrace(None)
+    sys.stdout = _real_stdout
+
+print(json.dumps({
+    'steps': _steps,
+    'out': _outbuf.getvalue(),
+    'truncated': len(_steps) >= MAX_STEPS,
+    'error': _err
+}))
+`
+
+func serveTrace(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	filePath := r.URL.Query().Get("path")
+	if filePath == "" {
+		http.Error(w, "path required", http.StatusBadRequest)
+		return
+	}
+
+	tmp, err := os.CreateTemp("", "sane-trace-*.py")
+	if err != nil {
+		http.Error(w, "failed to create tracer: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	tmp.WriteString(tracerScript)
+	tmp.Close()
+	defer os.Remove(tmp.Name())
+
+	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
+	defer cancel()
+
+	python, _ := findVenv(filepath.Dir(filePath))
+	cmd := exec.CommandContext(ctx, python, "-u", tmp.Name(), filePath)
+	cmd.Dir = filepath.Dir(filePath)
+	cmd.Env = append(os.Environ(), "PYTHONUTF8=1", "PYTHONIOENCODING=utf-8")
+
+	out, err := cmd.Output()
+	if err != nil && len(out) == 0 {
+		http.Error(w, "trace failed: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(out)
+}
+
 // ── Entry point ───────────────────────────────────────────
 
 func main() {
+	http.HandleFunc("/preview-dir/", withCORS(servePreviewDir))
 	http.HandleFunc("/shell", withCORS(serveShell))
+	http.HandleFunc("/shell/stdin", withCORS(serveShellStdin))
 	http.HandleFunc("/run", withCORS(serveRun))
+	http.HandleFunc("/run/stdin", withCORS(serveRunStdin))
+	http.HandleFunc("/trace", withCORS(serveTrace))
 	http.HandleFunc("/pyenv", withCORS(servePyEnv))
 	http.HandleFunc("/files", withCORS(serveFiles))
 	http.HandleFunc("/file", withCORS(serveFile))

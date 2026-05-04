@@ -12,17 +12,20 @@
   const elSend     = document.getElementById('ai-send');
   const elCtx      = document.getElementById('ai-ctx');
   const elStatus   = document.getElementById('ai-status');
+  const elPBToggle = document.getElementById('ai-pb-toggle');
 
   const TIERS = [
-    { id: 'fast',     label: 'Fast',     model: 'qwen2.5-coder', icon: '⚡' },
-    { id: 'balanced', label: 'Balanced', model: 'deepseek-r1',   icon: '⚖️' },
-    { id: 'advanced', label: 'Advanced', model: 'phi4',           icon: '🧠' },
+    { id: 'fast',     label: 'Fast',     model: 'qwen2.5-coder',     icon: '⚡' },
+    { id: 'balanced', label: 'Balanced', model: 'deepseek-coder-v2', icon: '⚖️' },
+    { id: 'advanced', label: 'Advanced', model: 'qwen2.5-coder:32b', icon: '🧠' },
   ];
   const STORAGE_KEY = 'sane_active_tier';
 
   let activeTierId = localStorage.getItem(STORAGE_KEY) || null;
   let streaming    = false;
   let abortCtrl    = null;
+  let pbMode       = false;
+  let pbLocked     = false;
 
   // ── Shared model accessor (used by task_mode.js) ──────────
   function getActiveTier() { return TIERS.find(t => t.id === activeTierId) || null; }
@@ -121,6 +124,32 @@
     elMessages.scrollTop = elMessages.scrollHeight;
   }
 
+  // ── Project Builder mode ──────────────────────────────────
+  function enterPBMode() {
+    pbMode = true;
+    elPBToggle.textContent = '← Chat';
+    elPBToggle.classList.add('pb-active');
+    elInput.placeholder = 'Describe your project… (Enter to generate)';
+    addSeparator('── Project Builder ──');
+  }
+
+  function exitPBMode() {
+    pbMode = false;
+    elPBToggle.textContent = '+ Builder';
+    elPBToggle.classList.remove('pb-active');
+    elInput.placeholder = 'Ask anything… (Enter to send, Shift+Enter for newline)';
+    addSeparator('── Chat ──');
+  }
+
+  function togglePBMode() {
+    if (!elPanel.classList.contains('hidden') && pbMode) exitPBMode();
+    else { open(); enterPBMode(); }
+  }
+
+  elPBToggle.addEventListener('click', () => {
+    pbMode ? exitPBMode() : enterPBMode();
+  });
+
   // ── Open / close ──────────────────────────────────────────
   function open() {
     elPanel.classList.remove('hidden');
@@ -203,6 +232,21 @@
 
   // ── Send ──────────────────────────────────────────────────
   async function send() {
+    if (pbLocked) return;
+
+    // Project Builder mode — route to PB handler
+    if (pbMode) {
+      if (streaming) return;
+      const text = elInput.value.trim();
+      if (!text) return;
+      if (!getModel()) { setStatus('Set up an AI model first', 'err'); return; }
+      addMessage('user', text);
+      elInput.value = '';
+      elInput.style.height = '';
+      window.sane.pbHandleSend?.(text);
+      return;
+    }
+
     if (streaming) { abort(); return; }
     const text = elInput.value.trim();
     if (!text) return;
@@ -310,6 +354,15 @@
       e.preventDefault();
       toggle();
     }
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'B') {
+      e.preventDefault();
+      togglePBMode();
+    }
+    // ESC cancels active stream; if idle, closes panel
+    if (e.key === 'Escape' && !elPanel.classList.contains('hidden')) {
+      if (streaming) { e.stopPropagation(); abort(); }
+      else close();
+    }
   });
 
   document.addEventListener('sane:ai-ask', async (e) => {
@@ -335,4 +388,29 @@
   });
 
   renderTierBtn();
+
+  // ── Expose helpers for project_builder.js ─────────────────
+  window.sane = window.sane || {};
+
+  window.sane.aiAddMessage = (role, text) => addMessage(role, text);
+  window.sane.aiAddSeparator = (text) => addSeparator(text);
+  window.sane.aiAddElement = (el) => {
+    elMessages.appendChild(el);
+    elMessages.scrollTop = elMessages.scrollHeight;
+  };
+  window.sane.aiLockInput = (locked) => {
+    pbLocked = locked;
+    elInput.readOnly = locked;
+    elInput.placeholder = locked
+      ? 'Building project… please wait'
+      : pbMode
+        ? 'Describe your project… (Enter to generate)'
+        : 'Ask anything… (Enter to send, Shift+Enter for newline)';
+    elSend.disabled  = locked || !getActiveTier();
+    elPBToggle.disabled = locked;
+  };
+  window.sane.aiOpenPanel = open;
+  window.sane.aiEnterPBMode = () => { open(); if (!pbMode) enterPBMode(); };
+  window.sane.cancelAI = () => { if (streaming) abort(); };
+  window.sane.isAIStreaming = () => streaming;
 })();

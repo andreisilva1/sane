@@ -110,6 +110,8 @@ function buildTreeNodes(nodes, container, depth) {
     label.textContent = node.name;
     row.appendChild(label);
 
+    row.setAttribute('tabindex', '0');
+
     if (node.isDir) {
       let expanded = false;
       const childWrap = document.createElement('div');
@@ -118,19 +120,29 @@ function buildTreeNodes(nodes, container, depth) {
         buildTreeNodes(node.children, childWrap, depth + 1);
       }
 
-      row.addEventListener('click', (e) => {
-        e.stopPropagation();
+      function toggleDir() {
         expanded = !expanded;
         icon.textContent = expanded ? '▾' : '▸';
         childWrap.classList.toggle('hidden', !expanded);
+      }
+
+      row.addEventListener('click', e => { e.stopPropagation(); toggleDir(); });
+      row.addEventListener('keydown', e => {
+        if (e.key === 'Enter' || e.key === ' ')        { e.preventDefault(); toggleDir(); }
+        if (e.key === 'ArrowRight' && !expanded)        { e.preventDefault(); toggleDir(); }
+        if (e.key === 'ArrowLeft'  &&  expanded)        { e.preventDefault(); toggleDir(); }
+        if (e.key === 'ArrowLeft'  && !expanded) {
+          e.preventDefault();
+          row.closest('.tree-children')?.previousElementSibling?.focus();
+        }
       });
 
       container.appendChild(row);
       container.appendChild(childWrap);
     } else {
-      row.addEventListener('click', (e) => {
-        e.stopPropagation();
-        openFile(node.path, row);
+      row.addEventListener('click', e => { e.stopPropagation(); openFile(node.path, row); });
+      row.addEventListener('keydown', e => {
+        if (e.key === 'Enter') { e.preventDefault(); openFile(node.path, row); }
       });
       container.appendChild(row);
     }
@@ -245,6 +257,52 @@ document.getElementById('btn-sidebar').addEventListener('click', () => {
       elOverlay.classList.add('hidden');
   });
 })();
+
+// ── File tree: ArrowUp/Down + Shift+F10 context menu ─────
+elTree.addEventListener('keydown', e => {
+  const items = [...elTree.querySelectorAll('.tree-item')].filter(el => {
+    // only visible items (not inside a hidden children wrapper)
+    return !el.closest('.tree-children.hidden');
+  });
+  const cur  = document.activeElement;
+  const idx  = items.indexOf(cur);
+
+  if (e.key === 'ArrowDown' && idx >= 0) {
+    e.preventDefault();
+    items[Math.min(idx + 1, items.length - 1)]?.focus();
+    return;
+  }
+  if (e.key === 'ArrowUp' && idx >= 0) {
+    e.preventDefault();
+    items[Math.max(idx - 1, 0)]?.focus();
+    return;
+  }
+  // Shift+F10 or Ctrl+. → open context menu at focused item
+  if ((e.key === 'F10' && e.shiftKey) || (e.ctrlKey && e.key === '.')) {
+    if (cur && cur.classList.contains('tree-item')) {
+      e.preventDefault();
+      const rect = cur.getBoundingClientRect();
+      cur.dispatchEvent(new MouseEvent('contextmenu', {
+        bubbles: true, clientX: rect.left + 8, clientY: rect.top + 8
+      }));
+    }
+  }
+});
+
+// ── Expose tree refresh for other modules ─────────────────
+window.sane = window.sane || {};
+window.sane.refreshTree = async function () {
+  if (!state.folder) return;
+  try {
+    const res   = await apiFetch('/files?path=' + encodeURIComponent(state.folder));
+    const nodes = await res.json() || [];
+    renderTree(nodes);
+  } catch (err) {
+    setStatus('Refresh failed: ' + err.message, 'err');
+  }
+};
+window.sane.openFile = (path) => openFile(path, null);
+
 
 // ── Boot ──────────────────────────────────────────────────
 elEditor.disabled = true;
