@@ -219,12 +219,17 @@ elEditor.addEventListener('input', () => {
   }
 });
 
+const AUTOPAIRS  = { '(': ')', '[': ']', '{': '}', "'": "'", '"': '"', '`': '`' };
+const AUTOCLOSE  = new Set([')', ']', '}', "'", '"', '`']);
+
 elEditor.addEventListener('keydown', (e) => {
   // Ctrl+S / Cmd+S → save
   if ((e.ctrlKey || e.metaKey) && e.key === 's') {
     e.preventDefault();
     if (!elBtnSave.disabled) saveFile();
+    return;
   }
+
   // Tab → insert spaces
   if (e.key === 'Tab') {
     e.preventDefault();
@@ -232,6 +237,51 @@ elEditor.addEventListener('keydown', (e) => {
     const v = elEditor.value;
     elEditor.value = v.slice(0, s) + '    ' + v.slice(elEditor.selectionEnd);
     elEditor.selectionStart = elEditor.selectionEnd = s + 4;
+    return;
+  }
+
+  // Auto-pair: ( [ { ' " `
+  if (AUTOPAIRS[e.key] && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    const close = AUTOPAIRS[e.key];
+    const s   = elEditor.selectionStart;
+    const end = elEditor.selectionEnd;
+    const v   = elEditor.value;
+    e.preventDefault();
+    if (s !== end) {
+      // Wrap selection
+      elEditor.value = v.slice(0, s) + e.key + v.slice(s, end) + close + v.slice(end);
+      elEditor.selectionStart = s + 1;
+      elEditor.selectionEnd   = end + 1;
+    } else {
+      // Insert pair and place cursor inside
+      elEditor.value = v.slice(0, s) + e.key + close + v.slice(s);
+      elEditor.selectionStart = elEditor.selectionEnd = s + 1;
+    }
+    elEditor.dispatchEvent(new Event('input'));
+    return;
+  }
+
+  // Skip over closing char if it's already the next character
+  if (AUTOCLOSE.has(e.key) && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    const s = elEditor.selectionStart;
+    const v = elEditor.value;
+    if (s === elEditor.selectionEnd && v[s] === e.key) {
+      e.preventDefault();
+      elEditor.selectionStart = elEditor.selectionEnd = s + 1;
+      return;
+    }
+  }
+
+  // Smart backspace: delete both chars of a pair
+  if (e.key === 'Backspace' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    const s = elEditor.selectionStart;
+    const v = elEditor.value;
+    if (s === elEditor.selectionEnd && s > 0 && AUTOPAIRS[v[s - 1]] === v[s]) {
+      e.preventDefault();
+      elEditor.value = v.slice(0, s - 1) + v.slice(s + 1);
+      elEditor.selectionStart = elEditor.selectionEnd = s - 1;
+      elEditor.dispatchEvent(new Event('input'));
+    }
   }
 });
 

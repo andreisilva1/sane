@@ -160,8 +160,6 @@ button:disabled {
 }
 
 #btn-sidebar,
-#btn-shortcuts,
-#btn-open,
 #btn-save,
 #btn-preview,
 #btn-trace { display: none !important; }
@@ -2518,6 +2516,136 @@ kbd {
   border-color: rgba(63,185,80,0.2);
   background: var(--success-bg);
 }
+
+.ais-btn-delete {
+  margin-left: 6px;
+  color: var(--text-muted);
+  border-color: var(--border);
+  font-size: 11px;
+  padding: 4px 10px;
+}
+.ais-btn-delete:hover {
+  color: #e06c75;
+  border-color: rgba(224,108,117,0.35);
+  background: rgba(224,108,117,0.08);
+}
+
+.ais-btn-del-yes {
+  color: #e06c75;
+  border-color: rgba(224,108,117,0.35);
+  font-size: 11px;
+  padding: 4px 10px;
+}
+.ais-btn-del-yes:hover { background: rgba(224,108,117,0.12); }
+
+.ais-btn-del-no {
+  font-size: 11px;
+  padding: 4px 10px;
+  margin-left: 4px;
+}
+
+.ais-del-confirm {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-right: 8px;
+  align-self: center;
+}
+
+/* ── Ollama warning bar ──────────────────────────────────── */
+
+#ais-ollama-warn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  margin-bottom: 14px;
+  background: rgba(229,192,123,0.08);
+  border: 1px solid rgba(229,192,123,0.25);
+  border-radius: var(--r-sm);
+  font-size: 12px;
+}
+
+.ais-warn-text { color: var(--text-dim); flex: 1; }
+
+.ais-install-btn {
+  font-size: 11px;
+  padding: 3px 12px;
+  color: #e5c07b;
+  border-color: rgba(229,192,123,0.35);
+  border-radius: var(--r-sm);
+  white-space: nowrap;
+}
+.ais-install-btn:hover:not(:disabled) {
+  background: rgba(229,192,123,0.1);
+}
+.ais-install-btn:disabled {
+  opacity: 0.5;
+}
+
+/* ── Ollama install corner widget ────────────────────────── */
+
+#ollama-widget {
+  position: fixed;
+  bottom: 40px;
+  right: 16px;
+  z-index: 9000;
+  width: 220px;
+  background: var(--bg2);
+  border: 1px solid var(--border2);
+  border-radius: var(--r);
+  padding: 10px 12px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+}
+
+#ollama-widget-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-dim);
+  margin-bottom: 6px;
+}
+
+#ollama-widget-bar {
+  height: 3px;
+  background: var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-bottom: 5px;
+}
+
+#ollama-widget-fill {
+  height: 100%;
+  width: 0%;
+  background: #e5c07b;
+  border-radius: 2px;
+  transition: width 0.4s ease;
+}
+
+#ollama-widget-info {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* ── AI panel — no model message ─────────────────────────── */
+
+#ai-no-model {
+  padding: 12px 14px;
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+  border-top: 1px solid var(--border);
+}
+
+#ai-no-model button {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 12px;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+#ai-no-model button:hover { color: var(--accent-h); }
 
 /* ── Project Builder (chat mode) ─────────────────────────── */
 

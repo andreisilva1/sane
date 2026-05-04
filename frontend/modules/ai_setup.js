@@ -1,5 +1,6 @@
 // ── AI Setup — local_ai_one_click_system_v1 ───────────────
 // Manages model tier selection, download, activation, persistence.
+// Ollama presence check + auto-install + model delete.
 // Depends on: apiFetch, setStatus
 
 (function () {
@@ -35,12 +36,10 @@
     },
   ];
 
-  // ── Persistence ───────────────────────────────────────────
   const STORAGE_KEY = 'sane_active_tier';
 
   function saveActive(tierId) { localStorage.setItem(STORAGE_KEY, tierId); }
   function loadActive()       { return localStorage.getItem(STORAGE_KEY); }
-
   function tierById(id)       { return TIERS.find(t => t.id === id) || null; }
 
   // ── DOM refs ──────────────────────────────────────────────
@@ -50,10 +49,19 @@
   const elOllamaWarn = document.getElementById('ais-ollama-warn');
   const elAIBadge    = document.getElementById('ai-badge');
 
+  // Corner widget refs
+  const elWidget     = document.getElementById('ollama-widget');
+  const elWidgetFill = document.getElementById('ollama-widget-fill');
+  const elWidgetInfo = document.getElementById('ollama-widget-info');
+  const elWidgetTitle= document.getElementById('ollama-widget-title');
+
   // ── State ─────────────────────────────────────────────────
-  let installedModels = new Set();
-  let pullTimers      = {};
-  let activeTierId    = loadActive();
+  let installedModels  = new Set();
+  let pullTimers       = {};
+  let activeTierId     = loadActive();
+  let ollamaState      = 'unknown'; // not_installed | not_running | running
+  let ollamaInstalling = false;
+  let installPollTimer = null;
 
   // ── Open / close ──────────────────────────────────────────
   async function open() {
@@ -75,34 +83,131 @@
 
   elAIBadge.addEventListener('click', open);
 
+  // ── Ollama state ──────────────────────────────────────────
+  async function fetchOllamaStatus() {
+    try {
+      const res  = await apiFetch('/ai/ollama/status');
+      return await res.json();
+    } catch {
+      return { state: 'unknown', installState: '' };
+    }
+  }
+
+  function renderOllamaWarn(status) {
+    const { state, installState } = status;
+    ollamaState = state;
+
+    if (state === 'not_installed') {
+      if (installState === 'downloading' || installState === 'installing') {
+        elOllamaWarn.innerHTML =
+          `<span class="ais-warn-text">Installing Ollama in background…</span>` +
+          `<button class="ais-install-btn" disabled>Installing…</button>`;
+      } else if (installState === 'error') {
+        elOllamaWarn.innerHTML =
+          `<span class="ais-warn-text">⚠ Ollama install failed.</span>` +
+          `<button class="ais-install-btn" id="ais-install-btn">Retry</button>`;
+        document.getElementById('ais-install-btn')?.addEventListener('click', startOllamaInstall);
+      } else {
+        elOllamaWarn.innerHTML =
+          `<span class="ais-warn-text">⚠ Ollama not found — required for AI features.</span>` +
+          `<button class="ais-install-btn" id="ais-install-btn">Install automatically</button>`;
+        document.getElementById('ais-install-btn')?.addEventListener('click', startOllamaInstall);
+      }
+      elOllamaWarn.classList.remove('hidden');
+    } else {
+      elOllamaWarn.classList.add('hidden');
+    }
+  }
+
+  // ── Ollama install ────────────────────────────────────────
+  async function startOllamaInstall() {
+    ollamaInstalling = true;
+    renderOllamaWarn({ state: 'not_installed', installState: 'downloading' });
+    renderCards();
+
+    try {
+      await apiFetch('/ai/ollama/install', { method: 'POST' });
+    } catch { /* fire and forget */ }
+
+    showWidget('Downloading Ollama', 0);
+    pollInstallStatus();
+  }
+
+  function showWidget(title, pct, info) {
+    elWidget.classList.remove('hidden');
+    elWidgetTitle.textContent = title;
+    elWidgetFill.style.width  = pct + '%';
+    elWidgetInfo.textContent  = info || (pct + '%');
+  }
+
+  function hideWidget() {
+    elWidget.classList.add('hidden');
+  }
+
+  function pollInstallStatus() {
+    clearInterval(installPollTimer);
+    installPollTimer = setInterval(async () => {
+      try {
+        const res  = await apiFetch('/ai/ollama/install/status');
+        const st   = await res.json();
+
+        if (st.state === 'downloading') {
+          showWidget('Downloading Ollama', st.pct, st.pct + '%');
+        } else if (st.state === 'installing') {
+          showWidget('Installing Ollama', 100, 'Installing…');
+        } else if (st.state === 'done') {
+          clearInterval(installPollTimer);
+          ollamaInstalling = false;
+          showWidget('Ollama Ready', 100, 'Done!');
+          setTimeout(() => {
+            hideWidget();
+            refresh();
+          }, 1500);
+        } else if (st.state === 'error') {
+          clearInterval(installPollTimer);
+          ollamaInstalling = false;
+          hideWidget();
+          setStatus('Ollama install failed: ' + st.msg, 'err');
+          refresh();
+        }
+      } catch {}
+    }, 800);
+  }
+
   // ── Refresh model list ────────────────────────────────────
   async function refresh() {
-    // Check Ollama
-    try {
-      const chk = await apiFetch('/ai/check');
-      const { installed } = await chk.json();
-      elOllamaWarn.classList.toggle('hidden', installed);
-    } catch {
-      elOllamaWarn.classList.remove('hidden');
+    const ollamaStatus = await fetchOllamaStatus();
+
+    // If a background install is running, re-attach polling
+    if (ollamaStatus.installState === 'downloading' || ollamaStatus.installState === 'installing') {
+      ollamaInstalling = true;
+      if (!installPollTimer) pollInstallStatus();
     }
 
-    // Fetch installed models
-    try {
-      const res    = await apiFetch('/ai/models');
-      const models = await res.json() || [];
-      installedModels = new Set(models.filter(m => m.installed).map(m => m.name));
-    } catch {
+    renderOllamaWarn(ollamaStatus);
+
+    // Only fetch models if Ollama is reachable
+    if (ollamaStatus.state !== 'not_installed') {
+      try {
+        const res    = await apiFetch('/ai/models');
+        const models = await res.json() || [];
+        installedModels = new Set(models.filter(m => m.installed).map(m => m.name));
+      } catch {
+        installedModels = new Set();
+      }
+    } else {
       installedModels = new Set();
     }
 
-    // Validate stored active tier — clear if model is no longer installed
+    // Invalidate stored tier if model is gone
     if (activeTierId) {
       const tier = tierById(activeTierId);
-      const modelPresent = tier && (installedModels.has(tier.model) ||
+      const present = tier && (installedModels.has(tier.model) ||
         [...installedModels].some(m => m.startsWith(tier.model)));
-      if (!modelPresent) {
+      if (!present) {
         activeTierId = null;
         localStorage.removeItem(STORAGE_KEY);
+        document.dispatchEvent(new CustomEvent('sane:model-deactivated'));
       }
     }
 
@@ -113,9 +218,9 @@
   // ── Render tier cards ─────────────────────────────────────
   function renderCards() {
     elCards.innerHTML = '';
-
-    const ram = navigator.deviceMemory || 8;
+    const ram      = navigator.deviceMemory || 8;
     const suggested = ram < 12 ? 'fast' : ram < 28 ? 'balanced' : 'advanced';
+    const blocked  = ollamaInstalling || ollamaState === 'not_installed';
 
     for (const tier of TIERS) {
       const isInstalled = installedModels.has(tier.model) ||
@@ -142,64 +247,83 @@
           <div class="ais-prog-label" id="ais-plabel-${tier.id}">Starting…</div>
         </div>
         <div class="ais-actions">
-          ${renderButton(tier, isInstalled, isActive)}
+          ${renderButton(tier, isInstalled, isActive, blocked)}
         </div>
       `;
 
       elCards.appendChild(card);
-      wireCard(card, tier, isInstalled, isActive);
+      wireCard(card, tier, isInstalled, isActive, blocked);
     }
   }
 
-  function renderButton(tier, isInstalled, isActive) {
-    if (isActive)    return `<button class="ais-btn ais-btn-active" disabled>AI Active</button>`;
-    if (isInstalled) return `<button class="ais-btn ais-btn-activate" data-action="activate">Activate AI</button>`;
+  function renderButton(tier, isInstalled, isActive, blocked) {
+    const delBtn = `<button class="ais-btn ais-btn-delete" data-action="delete" title="Uninstall model">Remove</button>`;
+
+    if (isActive) {
+      return `<button class="ais-btn ais-btn-active" disabled>AI Active</button>${delBtn}`;
+    }
+    if (isInstalled) {
+      return `<button class="ais-btn ais-btn-activate" data-action="activate">Activate AI</button>${delBtn}`;
+    }
+    if (blocked) {
+      const tip = ollamaInstalling
+        ? 'Ollama is being installed, please wait…'
+        : 'Install Ollama first';
+      return `<button class="ais-btn ais-btn-download" disabled title="${tip}">Download AI</button>`;
+    }
     return `<button class="ais-btn ais-btn-download" data-action="download">Download AI</button>`;
   }
 
-  function wireCard(card, tier, isInstalled, isActive) {
-    const btn = card.querySelector('[data-action]');
-    if (!btn) return;
-
-    btn.addEventListener('click', () => {
-      if (btn.dataset.action === 'download') startDownload(tier);
-      if (btn.dataset.action === 'activate') activate(tier);
-    });
+  function wireCard(card, tier, isInstalled, isActive, blocked) {
+    card.querySelector('[data-action="download"]')?.addEventListener('click', () => startDownload(tier));
+    card.querySelector('[data-action="activate"]')?.addEventListener('click', () => activate(tier));
+    card.querySelector('[data-action="delete"]')?.addEventListener('click',   () => confirmDelete(card, tier));
   }
 
   // ── Download ──────────────────────────────────────────────
   async function startDownload(tier) {
-    // If already installed, skip download and activate directly
     const alreadyInstalled = installedModels.has(tier.model) ||
       [...installedModels].some(m => m.startsWith(tier.model));
     if (alreadyInstalled) { activate(tier); return; }
 
+    // Re-check Ollama state (it may have changed since cards were rendered)
+    const status = await fetchOllamaStatus();
+    if (status.installState === 'downloading' || status.installState === 'installing') {
+      setStatus('Ollama is being installed — please wait', '');
+      return;
+    }
+    if (status.state === 'not_installed') {
+      renderOllamaWarn(status);
+      elOllamaWarn.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      return;
+    }
+
+    doModelDownload(tier);
+  }
+
+  function doModelDownload(tier) {
     const progEl  = document.getElementById('ais-prog-' + tier.id);
     const fillEl  = document.getElementById('ais-fill-' + tier.id);
     const labelEl = document.getElementById('ais-plabel-' + tier.id);
     const card    = document.querySelector(`.ais-card[data-tier="${tier.id}"]`);
-    const btn     = card?.querySelector('[data-action]');
+    const btn     = card?.querySelector('[data-action="download"]');
 
     if (btn) { btn.textContent = 'Downloading…'; btn.disabled = true; }
     progEl?.classList.remove('hidden');
 
-    try {
-      await apiFetch('/ai/pull', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ Name: tier.model }),
-      });
-    } catch (err) {
+    apiFetch('/ai/pull', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ Name: tier.model }),
+    }).catch(err => {
       if (labelEl) labelEl.textContent = 'Error: ' + err.message;
-      return;
-    }
+    });
 
-    // Poll status
     clearInterval(pullTimers[tier.id]);
     pullTimers[tier.id] = setInterval(async () => {
       try {
-        const res  = await apiFetch('/ai/pull/status?name=' + encodeURIComponent(tier.model));
-        const st   = await res.json();
+        const res = await apiFetch('/ai/pull/status?name=' + encodeURIComponent(tier.model));
+        const st  = await res.json();
 
         if (st.total > 0) {
           const pct = Math.round((st.completed / st.total) * 100);
@@ -218,14 +342,45 @@
             installedModels.add(tier.model);
             if (fillEl)  fillEl.style.width = '100%';
             if (labelEl) labelEl.textContent = 'Download complete!';
-            setTimeout(() => {
-              progEl?.classList.add('hidden');
-              renderCards();
-            }, 1200);
+            setTimeout(() => { progEl?.classList.add('hidden'); renderCards(); }, 1200);
           }
         }
       } catch {}
     }, 600);
+  }
+
+  // ── Delete model ──────────────────────────────────────────
+  function confirmDelete(card, tier) {
+    const actionsEl = card.querySelector('.ais-actions');
+    if (!actionsEl) return;
+    actionsEl.innerHTML =
+      `<span class="ais-del-confirm">Remove ${tier.label}?</span>` +
+      `<button class="ais-btn ais-btn-del-yes">Yes, remove</button>` +
+      `<button class="ais-btn ais-btn-del-no">Cancel</button>`;
+    actionsEl.querySelector('.ais-btn-del-yes').addEventListener('click', () => doDelete(tier));
+    actionsEl.querySelector('.ais-btn-del-no').addEventListener('click', () => renderCards());
+  }
+
+  async function doDelete(tier) {
+    setStatus('Removing ' + tier.label + '…', '');
+    try {
+      await apiFetch('/ai/model', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ Name: tier.model }),
+      });
+      installedModels.delete(tier.model);
+      if (activeTierId === tier.id) {
+        activeTierId = null;
+        localStorage.removeItem(STORAGE_KEY);
+        updateBadge();
+        document.dispatchEvent(new CustomEvent('sane:model-deactivated'));
+      }
+      setStatus(tier.label + ' removed', 'ok');
+    } catch (err) {
+      setStatus('Remove failed: ' + err.message, 'err');
+    }
+    renderCards();
   }
 
   // ── Activate ──────────────────────────────────────────────
@@ -247,7 +402,7 @@
     if (!elAIBadge) return;
     const tier = tierById(activeTierId);
     if (tier) {
-      elAIBadge.textContent = '⬤ ' + tier.label;
+      elAIBadge.textContent = 'AI · ' + tier.label;
       elAIBadge.classList.add('ais-badge-live');
     } else {
       elAIBadge.textContent = 'Set up AI';
@@ -265,11 +420,14 @@
     if (tier) { activeTierId = tier.id; saveActive(tier.id); updateBadge(); }
   });
 
-  // Expose open globally
+  // Re-render AI panel input state on deactivation
+  document.addEventListener('sane:model-deactivated', () => {
+    document.dispatchEvent(new CustomEvent('sane:render-ai-input'));
+  });
+
   window.sane = window.sane || {};
   window.sane.openAISetup = open;
 
-  // Auto-open on first use if nothing active
   if (!activeTierId) {
     setTimeout(() => {
       if (!localStorage.getItem(STORAGE_KEY)) open();

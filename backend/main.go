@@ -552,6 +552,169 @@ func serveAICheck(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]bool{"installed": checkOllamaCLI()})
 }
 
+// ── Ollama auto-install ───────────────────────────────────
+
+var ollamaInstall struct {
+	sync.Mutex
+	state string // "" | "downloading" | "installing" | "done" | "error"
+	pct   int
+	msg   string
+}
+
+func serveOllamaStatus(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	state := "not_installed"
+	if checkOllamaCLI() {
+		if isOllamaRunning() {
+			state = "running"
+		} else {
+			state = "not_running"
+		}
+	}
+	ollamaInstall.Lock()
+	ist := ollamaInstall.state
+	ollamaInstall.Unlock()
+	json.NewEncoder(w).Encode(map[string]string{"state": state, "installState": ist})
+}
+
+func serveOllamaInstallStatus(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	ollamaInstall.Lock()
+	defer ollamaInstall.Unlock()
+	json.NewEncoder(w).Encode(map[string]any{
+		"state": ollamaInstall.state,
+		"pct":   ollamaInstall.pct,
+		"msg":   ollamaInstall.msg,
+	})
+}
+
+func serveOllamaInstall(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if checkOllamaCLI() {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"state": "done"})
+		return
+	}
+	ollamaInstall.Lock()
+	if ollamaInstall.state == "downloading" || ollamaInstall.state == "installing" {
+		ollamaInstall.Unlock()
+		w.WriteHeader(http.StatusAccepted)
+		return
+	}
+	ollamaInstall.state = "downloading"
+	ollamaInstall.pct = 0
+	ollamaInstall.msg = "Downloading Ollama…"
+	ollamaInstall.Unlock()
+	go doInstallOllama()
+	w.WriteHeader(http.StatusAccepted)
+}
+
+func doInstallOllama() {
+	tmpPath := filepath.Join(os.TempDir(), "OllamaSetup.exe")
+
+	resp, err := http.Get("https://ollama.ai/download/OllamaSetup.exe")
+	if err != nil {
+		ollamaInstall.Lock()
+		ollamaInstall.state = "error"
+		ollamaInstall.msg = "Download failed: " + err.Error()
+		ollamaInstall.Unlock()
+		return
+	}
+	defer resp.Body.Close()
+
+	total := resp.ContentLength
+	f, err := os.Create(tmpPath)
+	if err != nil {
+		ollamaInstall.Lock()
+		ollamaInstall.state = "error"
+		ollamaInstall.msg = "Cannot write temp file: " + err.Error()
+		ollamaInstall.Unlock()
+		return
+	}
+
+	buf := make([]byte, 32*1024)
+	var downloaded int64
+	for {
+		n, readErr := resp.Body.Read(buf)
+		if n > 0 {
+			if _, wErr := f.Write(buf[:n]); wErr != nil {
+				f.Close()
+				ollamaInstall.Lock()
+				ollamaInstall.state = "error"
+				ollamaInstall.msg = "Write error: " + wErr.Error()
+				ollamaInstall.Unlock()
+				return
+			}
+			downloaded += int64(n)
+			if total > 0 {
+				pct := int(float64(downloaded) / float64(total) * 100)
+				ollamaInstall.Lock()
+				ollamaInstall.pct = pct
+				ollamaInstall.Unlock()
+			}
+		}
+		if readErr != nil {
+			break
+		}
+	}
+	f.Close()
+
+	ollamaInstall.Lock()
+	ollamaInstall.state = "installing"
+	ollamaInstall.pct = 100
+	ollamaInstall.msg = "Installing Ollama…"
+	ollamaInstall.Unlock()
+
+	cmd := exec.Command(tmpPath, "/S")
+	if err := cmd.Run(); err != nil {
+		ollamaInstall.Lock()
+		ollamaInstall.state = "error"
+		ollamaInstall.msg = "Install failed: " + err.Error()
+		ollamaInstall.Unlock()
+		return
+	}
+
+	for i := 0; i < 30; i++ {
+		time.Sleep(time.Second)
+		if checkOllamaCLI() {
+			break
+		}
+	}
+	_ = startOllamaIfNeeded()
+
+	ollamaInstall.Lock()
+	ollamaInstall.state = "done"
+	ollamaInstall.pct = 100
+	ollamaInstall.msg = "Ollama ready!"
+	ollamaInstall.Unlock()
+}
+
+func serveAIDeleteModel(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var body struct{ Name string }
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Name == "" {
+		http.Error(w, "name required", http.StatusBadRequest)
+		return
+	}
+	reqBody, _ := json.Marshal(map[string]string{"name": body.Name})
+	req, _ := http.NewRequest(http.MethodDelete, "http://localhost:11434/api/delete", bytes.NewReader(reqBody))
+	req.Header.Set("Content-Type", "application/json")
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		http.Error(w, "ollama error: "+err.Error(), http.StatusServiceUnavailable)
+		return
+	}
+	resp.Body.Close()
+	w.WriteHeader(http.StatusOK)
+}
+
 // ── Shell execution (streaming SSE + interactive stdin) ────
 
 type shellProc struct {
@@ -1048,6 +1211,10 @@ func main() {
 	http.HandleFunc("/ai/models", withCORS(serveAIModels))
 	http.HandleFunc("/ai/pull", withCORS(serveAIPull))
 	http.HandleFunc("/ai/pull/status", withCORS(serveAIPullStatus))
+	http.HandleFunc("/ai/ollama/status", withCORS(serveOllamaStatus))
+	http.HandleFunc("/ai/ollama/install", withCORS(serveOllamaInstall))
+	http.HandleFunc("/ai/ollama/install/status", withCORS(serveOllamaInstallStatus))
+	http.HandleFunc("/ai/model", withCORS(serveAIDeleteModel))
 	http.HandleFunc("/ping", withCORS(func(w http.ResponseWriter, _ *http.Request) {
 		fmt.Fprint(w, "ok")
 	}))

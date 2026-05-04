@@ -35,11 +35,19 @@
   Object.defineProperty(window.sane, 'activeModel', { get: getModel, configurable: true });
 
   // ── Tier button ───────────────────────────────────────────
+  const elNoModel    = document.getElementById('ai-no-model');
+  const elInputRow   = document.getElementById('ai-input-row');
+  const elNoModelBtn = document.getElementById('ai-no-model-btn');
+
+  if (elNoModelBtn) elNoModelBtn.addEventListener('click', () => window.sane.openAISetup?.());
+
   function renderTierBtn() {
     const tier = getActiveTier();
     elTierBtn.textContent = tier ? (tier.icon + ' ' + tier.label) : 'Set up AI';
     elTierBtn.classList.toggle('ai-tier-live', !!tier);
     elSend.disabled = !tier;
+    if (elNoModel)  elNoModel.classList.toggle('hidden', !!tier);
+    if (elInputRow) elInputRow.classList.toggle('hidden', !tier);
   }
 
   // ── Tier menu ─────────────────────────────────────────────

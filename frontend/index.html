@@ -69,6 +69,9 @@
       <label id="ai-ctx-label">
         <input type="checkbox" id="ai-ctx"> include file
       </label>
+      <div id="ai-no-model" class="hidden">
+        No AI model active — <button id="ai-no-model-btn">set one up</button>
+      </div>
       <div id="ai-input-row">
         <textarea id="ai-input" placeholder="Ask anything… (Enter to send, Shift+Enter for newline)" rows="2"></textarea>
         <button id="ai-send" title="Send">↑</button>
@@ -322,9 +325,7 @@
         <span id="ais-title">Set Up Local AI</span>
         <button id="ais-close">×</button>
       </div>
-      <div id="ais-ollama-warn" class="hidden">
-        <span>⚠ Ollama not found. <a href="https://ollama.com" target="_blank">Install Ollama</a> and restart the editor.</span>
-      </div>
+      <div id="ais-ollama-warn" class="hidden"></div>
       <div id="ais-cards"></div>
     </div>
   </div>
@@ -414,5 +415,12 @@
   <script src="modules/command_palette.js"></script>
   <script src="modules/self_healing.js"></script>
   <script src="modules/run_insight.js"></script>
+
+  <!-- Ollama install progress widget (fixed corner) -->
+  <div id="ollama-widget" class="hidden">
+    <div id="ollama-widget-title">Downloading Ollama</div>
+    <div id="ollama-widget-bar"><div id="ollama-widget-fill"></div></div>
+    <div id="ollama-widget-info">Starting…</div>
+  </div>
 </body>
 </html>

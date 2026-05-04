@@ -4,7 +4,7 @@
 
 # Sane
 
-**A local-first code editor for Python, HTML, CSS, and JavaScript.**  
+**A local-first code editor for Python, HTML, CSS, and JavaScript (for now).**  
 Built-in AI. Zero cloud. Keyboard-first.
 
 [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
@@ -46,7 +46,7 @@ Sane is the opposite: a focused editor that runs your code, understands it, and 
 - **Run Insight** — automatic one-sentence AI summary of what your code did after each run
 
 ### Built-in AI (fully local)
-- Powered by [Ollama](https://ollama.ai) — no accounts, no API keys
+- Powered by Ollama — installed automatically, no accounts, no API keys
 - AI chat panel with streaming responses
 - **Project Builder** — describe a project, generate real multi-file scaffolding
 - AI Refactor with diff preview and approval step
@@ -131,9 +131,10 @@ Open the installed app or run `sane.exe` directly.
 Open a `.py` or `.js` file and press `Ctrl+Enter`. Output appears in the integrated panel.
 
 ### Using AI
-1. Install [Ollama](https://ollama.ai) and make sure it's running
-2. Open the AI panel (`Ctrl+Shift+A`)
-3. Click the tier button and select a model — Sane downloads it for you
+1. Open the AI panel (`Ctrl+Shift+A`)
+2. Click the tier button and select a model
+3. If Ollama isn't installed yet, Sane will offer to install it automatically
+4. Once Ollama is ready, the model downloads in the background — no terminal required
 
 ### Key shortcuts
 
@@ -155,7 +156,7 @@ Full reference: [snippets.md](snippets.md)
 
 ## AI models
 
-Sane uses [Ollama](https://ollama.ai) to run models locally. Three built-in tiers:
+Sane runs models locally via Ollama. If Ollama isn't on your machine, Sane installs it for you when you first set up AI. Three built-in tiers:
 
 | Tier | Notes |
 |---|---|
