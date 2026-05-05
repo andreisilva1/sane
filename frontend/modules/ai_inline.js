@@ -1,7 +1,3 @@
-// ── AI Inline Toolbar (feature_reintroduction_ai_inline_v1)
-// Depends on: state, window.sane.onFileOpen, 'sane:ai-ask' event
-// Shows a floating toolbar when text is selected in a .py editor.
-
 (function () {
   const elEditor = document.getElementById('editor');
 
@@ -29,7 +25,7 @@
       if (!sel) return;
       hide();
       document.dispatchEvent(new CustomEvent('sane:ai-ask', {
-        detail: { prompt: action.prompt(sel), label: action.label }
+        detail: { prompt: action.prompt(sel) }
       }));
     });
     elBar.appendChild(btn);

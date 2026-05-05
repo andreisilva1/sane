@@ -1,8 +1,3 @@
-// ── Python Runner (feature_reintroduction_runner_v1) ──────
-// Depends on: state, API, setStatus (globals from main.js)
-// Adds:       #btn-run button visibility, #output-panel SSE output
-// Hook:       main.js calls sane.onFileOpen(path) after each file open
-
 (function () {
   const elBtnRun    = document.getElementById('btn-run');
   const elBtnStop   = document.getElementById('btn-run-stop');

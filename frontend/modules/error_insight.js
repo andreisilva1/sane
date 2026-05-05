@@ -1,7 +1,3 @@
-// ── Error Insight (feature_reintroduction_error_insight_v1)
-// Depends on: runner.js firing 'sane:runend', window.sane.onFileOpen
-// Shows an inline error stripe + annotation when a Python run fails.
-
 (function () {
   const elEditor = document.getElementById('editor');
   const elArea   = document.getElementById('editor-area');

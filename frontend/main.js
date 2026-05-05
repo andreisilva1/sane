@@ -160,7 +160,6 @@ function buildTreeNodes(nodes, container, depth) {
 
 // ── Open File ─────────────────────────────────────────────
 async function openFile(path, rowEl) {
-  console.log('[sane] Opening file:', path);
   setStatus('Opening…', 'info');
 
   // Mark selection
@@ -175,7 +174,6 @@ async function openFile(path, rowEl) {
   try {
     const res = await apiFetch('/file?path=' + encodeURIComponent(path));
     const content = await res.text();
-    console.log('[sane] File opened, length:', content.length);
 
     state.filePath = path;
     state.content  = content;
@@ -190,14 +188,12 @@ async function openFile(path, rowEl) {
     if (window.sane?.onFileOpen) window.sane.onFileOpen(path);
   } catch (err) {
     setStatus('Failed to open: ' + err.message, 'err');
-    console.error('[sane] /file GET error', err);
   }
 }
 
 // ── Save File ─────────────────────────────────────────────
 async function saveFile() {
   if (!state.filePath) return;
-  console.log('[sane] Saving:', state.filePath);
   setStatus('Saving…', 'info');
 
   try {
@@ -211,11 +207,9 @@ async function saveFile() {
     state.dirty   = false;
     elBtnSave.disabled = true;
     elCurrentFile.textContent = state.filePath.split(/[/\\]/).pop();
-    console.log('[sane] Saved OK');
     setStatus('Saved', 'ok');
   } catch (err) {
     setStatus('Save failed: ' + err.message, 'err');
-    console.error('[sane] /file POST error', err);
   }
 }
 

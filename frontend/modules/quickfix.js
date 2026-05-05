@@ -1,7 +1,3 @@
-// ── Quick Fix (feature_reintroduction_quickfix_v1) ────────
-// Depends on: 'sane:runend' event, apiFetch, state, setStatus
-// Detects fixable errors and shows an action button near the annotation.
-
 (function () {
   const elEditor = document.getElementById('editor');
   const elArea   = document.getElementById('editor-area');

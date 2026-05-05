@@ -1,7 +1,3 @@
-// ── AI Panel (feature_reintroduction_ai_panel_v1) ─────────
-// Depends on: apiFetch, state, setStatus
-// Ctrl+Shift+A → toggle. Tier picker replaces model select.
-
 (function () {
   const elPanel    = document.getElementById('ai-panel');
   const elClose    = document.getElementById('ai-close');

@@ -40,7 +40,7 @@ func servePyEnv(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"python": python, "venv": label})
 }
 
-func buildPythonCmd(_ context.Context, body runBody, emit func(kind, text string)) (*exec.Cmd, string, error) {
+func buildPythonCmd(_ context.Context, body runBody, _ func(kind, text string)) (*exec.Cmd, string, error) {
 	projectDir := body.Root
 	if projectDir == "" {
 		projectDir = filepath.Dir(body.Path)

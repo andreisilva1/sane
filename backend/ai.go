@@ -18,12 +18,7 @@ import (
 
 // ── Model catalog ─────────────────────────────────────────
 
-type catalogEntry struct {
-	name string
-	size string
-}
-
-var catalog = []catalogEntry{
+var catalog = []struct{ name, size string }{
 	{"llama3",        "4.7 GB"},
 	{"llama3.2",      "2.0 GB"},
 	{"mistral",       "4.1 GB"},
