@@ -15,8 +15,19 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 )
+
+// noConsole prevents Windows from opening a visible CMD window when spawning
+// console-subsystem apps (python, cmd, etc.) from a windowsgui parent process.
+func noConsole(cmd *exec.Cmd) *exec.Cmd {
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		HideWindow:    true,
+		CreationFlags: 0x08000000, // CREATE_NO_WINDOW
+	}
+	return cmd
+}
 
 type Node struct {
 	Name     string `json:"name"`
@@ -292,7 +303,7 @@ func startOllamaIfNeeded() error {
 	if exe == "" {
 		return fmt.Errorf("ollama not found")
 	}
-	cmd := exec.Command(exe, "serve")
+	cmd := noConsole(exec.Command(exe, "serve"))
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("cannot start ollama: %w", err)
 	}
@@ -717,7 +728,7 @@ func doInstallOllama(ctx context.Context) {
 	ollamaInstall.msg = "Installing Ollama…"
 	ollamaInstall.Unlock()
 
-	cmd := exec.Command(tmpPath, "/S")
+	cmd := noConsole(exec.Command(tmpPath, "/S"))
 	if err := cmd.Run(); err != nil {
 		ollamaInstall.Lock()
 		ollamaInstall.state = "error"
@@ -807,7 +818,7 @@ func serveShell(w http.ResponseWriter, r *http.Request) {
 
 	var cmd *exec.Cmd
 	if runtime.GOOS == "windows" {
-		cmd = exec.CommandContext(ctx, "cmd", "/C", body.Cmd)
+		cmd = noConsole(exec.CommandContext(ctx, "cmd", "/C", body.Cmd))
 	} else {
 		cmd = exec.CommandContext(ctx, "sh", "-c", body.Cmd)
 	}
@@ -1008,7 +1019,7 @@ func serveRun(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeEvent(map[string]any{"type": "info", "venv": "node"})
-		cmd = exec.CommandContext(r.Context(), nodePath, body.Path)
+		cmd = noConsole(exec.CommandContext(r.Context(), nodePath, body.Path))
 		cmd.Dir = filepath.Dir(body.Path)
 		cmd.Env = os.Environ()
 	} else {
@@ -1020,7 +1031,7 @@ func serveRun(w http.ResponseWriter, r *http.Request) {
 		python, venvLabel := findVenv(projectDir)
 		writeEvent(map[string]any{"type": "info", "venv": venvLabel})
 		// -u: unbuffered stdout/stderr so each print() reaches the pipe immediately.
-		cmd = exec.CommandContext(r.Context(), python, "-u", body.Path)
+		cmd = noConsole(exec.CommandContext(r.Context(), python, "-u", body.Path))
 		cmd.Dir = filepath.Dir(body.Path)
 		cmd.Env = append(os.Environ(), "PYTHONUNBUFFERED=1")
 	}
@@ -1225,7 +1236,7 @@ func serveTrace(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	python, _ := findVenv(filepath.Dir(filePath))
-	cmd := exec.CommandContext(ctx, python, "-u", tmp.Name(), filePath)
+	cmd := noConsole(exec.CommandContext(ctx, python, "-u", tmp.Name(), filePath))
 	cmd.Dir = filepath.Dir(filePath)
 	cmd.Env = append(os.Environ(), "PYTHONUTF8=1", "PYTHONIOENCODING=utf-8")
 

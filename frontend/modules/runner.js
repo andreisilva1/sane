@@ -17,10 +17,12 @@
   let runTimer   = null;
   let runSessId  = null;
 
-  // ── Show/hide Run button based on file type ──────────────
+  // ── Show/hide Run / Trace buttons based on file type ─────
   function onFileOpen(path) {
-    const canRun = path && (path.endsWith('.py') || path.endsWith('.js'));
+    const canRun   = path && (path.endsWith('.py') || path.endsWith('.js'));
+    const canTrace = path && path.endsWith('.py');
     elBtnRun.classList.toggle('hidden', !canRun);
+    elBtnTrace.classList.toggle('hidden', !canTrace);
   }
 
   // ── Run ──────────────────────────────────────────────────

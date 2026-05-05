@@ -6,6 +6,50 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
+  <!-- Friendly-mode menu toolbar (sits above the header) -->
+  <div id="toolbar">
+    <div class="tb-menu" id="tb-file">
+      <button class="tb-btn">File</button>
+      <div class="tb-dropdown">
+        <div class="tb-item" data-action="open-folder">Open Folder…</div>
+        <div class="tb-sep"></div>
+        <div class="tb-item tb-item-sub" id="tb-recent-label">Open Recent ▸</div>
+        <div id="tb-recent-list"></div>
+        <div class="tb-sep"></div>
+        <div class="tb-item" data-action="save">Save <kbd>Ctrl+S</kbd></div>
+      </div>
+    </div>
+    <div class="tb-menu" id="tb-view">
+      <button class="tb-btn">View</button>
+      <div class="tb-dropdown">
+        <div class="tb-item" data-action="toggle-sidebar">Toggle Sidebar <kbd>Ctrl+B</kbd></div>
+        <div class="tb-item" data-action="toggle-terminal">Terminal <kbd>Ctrl+`</kbd></div>
+        <div class="tb-item" data-action="theme">Theme <kbd>Ctrl+,</kbd></div>
+        <div class="tb-sep"></div>
+        <div class="tb-item" data-action="command-palette">Command Palette <kbd>Ctrl+Shift+P</kbd></div>
+        <div class="tb-item" data-action="shortcuts">Keyboard Shortcuts</div>
+      </div>
+    </div>
+    <div class="tb-menu" id="tb-run">
+      <button class="tb-btn">Run</button>
+      <div class="tb-dropdown">
+        <div class="tb-item" data-action="run">Run File <kbd>Ctrl+Enter</kbd></div>
+        <div class="tb-item" data-action="preview">Preview HTML <kbd>Ctrl+Shift+V</kbd></div>
+        <div class="tb-item" data-action="trace">Execution Timeline</div>
+      </div>
+    </div>
+    <div class="tb-menu" id="tb-ai">
+      <button class="tb-btn">AI</button>
+      <div class="tb-dropdown">
+        <div class="tb-item" data-action="ai-panel">AI Chat <kbd>Ctrl+Shift+A</kbd></div>
+        <div class="tb-item" data-action="project-builder">Project Builder <kbd>Ctrl+Shift+B</kbd></div>
+        <div class="tb-item" data-action="ai-refactor">AI Refactor <kbd>Ctrl+Shift+I</kbd></div>
+        <div class="tb-sep"></div>
+        <div class="tb-item" data-action="ai-setup">Set Up AI…</div>
+      </div>
+    </div>
+  </div>
+
   <div id="header">
     <button id="btn-sidebar" title="Toggle explorer">⊟</button>
     <button id="btn-shortcuts" title="Keyboard shortcuts">?</button>
@@ -19,6 +63,10 @@
       <button id="btn-run" class="hidden" title="Run (Ctrl+Enter)">▶ Run</button>
       <button id="btn-run-stop" class="hidden btn-danger" title="Stop">■ Stop</button>
       <button id="btn-save" disabled>Save</button>
+      <select id="mode-select" title="UI mode">
+        <option value="classic">Classic</option>
+        <option value="friendly">Friendly</option>
+      </select>
     </div>
   </div>
 
@@ -412,6 +460,7 @@
 
   <script src="modules/preview.js"></script>
   <script src="modules/timeline.js"></script>
+  <script src="modules/mode.js"></script>
   <script src="modules/command_palette.js"></script>
   <script src="modules/self_healing.js"></script>
   <script src="modules/run_insight.js"></script>

@@ -48,41 +48,50 @@ async function waitForBackend() {
 }
 
 // ── Open Folder ───────────────────────────────────────────
-async function openFolder() {
-  console.log('[sane] Open Folder clicked');
-  setStatus('Opening folder…', 'info');
+const RECENT_KEY     = 'sane_recent_folders';
+const RECENT_MAX     = 8;
 
+function getRecent() {
+  try { return JSON.parse(localStorage.getItem(RECENT_KEY)) || []; } catch { return []; }
+}
+function pushRecent(dir) {
+  const list = [dir, ...getRecent().filter(p => p !== dir)].slice(0, RECENT_MAX);
+  localStorage.setItem(RECENT_KEY, JSON.stringify(list));
+  document.dispatchEvent(new CustomEvent('sane:recent-updated'));
+}
+
+async function loadFolder(dir) {
+  setStatus('Loading…', 'info');
+  try {
+    const res   = await apiFetch('/files?path=' + encodeURIComponent(dir));
+    const nodes = await res.json() || [];
+    state.folder = dir;
+    elFolderName.textContent = dir.split(/[/\\]/).pop();
+    renderTree(nodes);
+    setStatus('Folder loaded', 'ok');
+    pushRecent(dir);
+    document.body.classList.add('has-folder');
+  } catch (err) {
+    setStatus('Failed to load folder: ' + err.message, 'err');
+  }
+}
+
+async function openFolder() {
   let dir;
   try {
     const { open } = window.__TAURI__.dialog;
     dir = await open({ directory: true, multiple: false });
   } catch (err) {
     setStatus('Dialog error: ' + err.message, 'err');
-    console.error('[sane] dialog error', err);
     return;
   }
-
-  if (!dir) {
-    setStatus('');
-    return;
-  }
-
-  console.log('[sane] Folder selected:', dir);
-  setStatus('Loading…', 'info');
-
-  try {
-    const res = await apiFetch('/files?path=' + encodeURIComponent(dir));
-    const nodes = await res.json() || [];
-
-    state.folder = dir;
-    elFolderName.textContent = dir.split(/[/\\]/).pop();
-    renderTree(nodes);
-    setStatus('Folder loaded', 'ok');
-  } catch (err) {
-    setStatus('Failed to load folder: ' + err.message, 'err');
-    console.error('[sane] /files error', err);
-  }
+  if (!dir) { setStatus(''); return; }
+  loadFolder(dir);
 }
+
+window.sane = window.sane || {};
+window.sane.loadFolder = loadFolder;
+window.sane.getRecent  = getRecent;
 
 // ── File tree ─────────────────────────────────────────────
 function renderTree(nodes) {
@@ -357,6 +366,10 @@ window.sane.openFile = (path) => openFile(path, null);
 // ── Boot ──────────────────────────────────────────────────
 elEditor.disabled = true;
 waitForBackend().then(() => {
-  setStatus('Ready', 'ok');
-  console.log('[sane] Backend ready');
+  const last = getRecent()[0];
+  if (last) {
+    loadFolder(last);
+  } else {
+    setStatus('Ready', 'ok');
+  }
 });

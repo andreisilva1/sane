@@ -39,6 +39,7 @@
 
   function onFileOpen(path) {
     const isHtml = path && (path.endsWith('.html') || path.endsWith('.htm'));
+    elBtn.classList.toggle('hidden', !isHtml);
     if (!isHtml && !elPanel.classList.contains('hidden')) close();
     else if (isHtml && !elPanel.classList.contains('hidden')) refresh();
   }

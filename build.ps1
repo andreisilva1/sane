@@ -5,6 +5,7 @@ $ErrorActionPreference = "Stop"
 $target  = "x86_64-pc-windows-msvc"
 $binOut  = "src-tauri\binaries\sane-backend-$target.exe"
 $exeOut  = "src-tauri\target\release\sane.exe"
+$bundleDir = "src-tauri\target\release\bundle"
 $start   = Get-Date
 
 function Step($label) {
@@ -31,7 +32,7 @@ foreach ($proc in @("sane", "sane-backend")) {
         $p | Stop-Process -Force
     }
 }
-Start-Sleep -Milliseconds 500
+Start-Sleep -Milliseconds 1000
 
 # ── Dependency check ──────────────────────────────────────
 
@@ -55,21 +56,27 @@ Step "Building Go backend"
 
 New-Item -ItemType Directory -Force -Path "src-tauri\binaries" | Out-Null
 Push-Location backend
-go build -ldflags="-s -w" -o "..\$binOut" .
-Pop-Location
+try {
+    go build -ldflags="-s -w" -o "..\$binOut" .
+    if ($LASTEXITCODE -ne 0) { throw "go build failed (exit $LASTEXITCODE)" }
+} finally {
+    Pop-Location
+}
 
 Ok "$binOut"
 
 # ── npm install ───────────────────────────────────────────
 
 Step "Installing npm dependencies"
-npm install --prefer-offline 2>&1 | Select-String -NotMatch "^npm warn"
+npm install --prefer-offline --silent
+if ($LASTEXITCODE -ne 0) { Fail "npm install failed" }
 Ok "done"
 
 # ── Tauri build ───────────────────────────────────────────
 
 Step "Building Tauri app (first run takes a few minutes)"
 npm run build
+if ($LASTEXITCODE -ne 0) { Fail "tauri build failed" }
 
 # ── Done ──────────────────────────────────────────────────
 
