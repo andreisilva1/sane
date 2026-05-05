@@ -2566,6 +2566,13 @@ kbd {
 }
 
 .ais-warn-text { color: var(--text-dim); flex: 1; }
+.ais-warn-ok      { color: #98c379; }
+.ais-warn-restart { color: var(--text-dim); }
+
+#ais-ollama-warn.ais-ok {
+  background: rgba(152,195,121,0.07);
+  border-color: rgba(152,195,121,0.22);
+}
 
 .ais-install-btn {
   font-size: 11px;
@@ -2580,6 +2587,14 @@ kbd {
 }
 .ais-install-btn:disabled {
   opacity: 0.5;
+}
+.ais-btn-ghost {
+  color: var(--text-muted);
+  border-color: var(--border);
+}
+.ais-btn-ghost:hover:not(:disabled) {
+  color: var(--text);
+  background: var(--hover);
 }
 
 /* ── Ollama install corner widget ────────────────────────── */
@@ -2597,12 +2612,29 @@ kbd {
   box-shadow: 0 4px 16px rgba(0,0,0,0.4);
 }
 
+#ollama-widget-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
 #ollama-widget-title {
   font-size: 11px;
   font-weight: 600;
   color: var(--text-dim);
-  margin-bottom: 6px;
 }
+
+#ollama-widget-cancel {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 2px;
+  cursor: pointer;
+}
+#ollama-widget-cancel:hover { color: var(--text); }
 
 #ollama-widget-bar {
   height: 3px;

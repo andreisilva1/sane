@@ -269,11 +269,30 @@ func isOllamaRunning() bool {
 	return true
 }
 
+func ollamaExePath() string {
+	if path, err := exec.LookPath("ollama"); err == nil {
+		return path
+	}
+	// PATH is inherited at process launch and won't include Ollama if it was
+	// installed after the sane-backend started — fall back to the known path.
+	if local := os.Getenv("LOCALAPPDATA"); local != "" {
+		candidate := filepath.Join(local, "Programs", "Ollama", "ollama.exe")
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate
+		}
+	}
+	return ""
+}
+
 func startOllamaIfNeeded() error {
 	if isOllamaRunning() {
 		return nil
 	}
-	cmd := exec.Command("ollama", "serve")
+	exe := ollamaExePath()
+	if exe == "" {
+		return fmt.Errorf("ollama not found")
+	}
+	cmd := exec.Command(exe, "serve")
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("cannot start ollama: %w", err)
 	}
@@ -468,17 +487,7 @@ func serveAIPullStatus(w http.ResponseWriter, r *http.Request) {
 // ── Ollama CLI check ──────────────────────────────────────
 
 func checkOllamaCLI() bool {
-	if _, err := exec.LookPath("ollama"); err == nil {
-		return true
-	}
-	// Fallback: check default Windows install path (PATH may not be updated yet)
-	if local := os.Getenv("LOCALAPPDATA"); local != "" {
-		candidate := filepath.Join(local, "Programs", "Ollama", "ollama.exe")
-		if _, err := os.Stat(candidate); err == nil {
-			return true
-		}
-	}
-	return false
+	return ollamaExePath() != ""
 }
 
 func serveAIAsk(w http.ResponseWriter, r *http.Request) {
@@ -556,20 +565,23 @@ func serveAICheck(w http.ResponseWriter, r *http.Request) {
 
 var ollamaInstall struct {
 	sync.Mutex
-	state string // "" | "downloading" | "installing" | "done" | "error"
-	pct   int
-	msg   string
+	state  string // "" | "downloading" | "installing" | "done" | "error" | "cancelled"
+	pct    int
+	msg    string
+	cancel context.CancelFunc
 }
 
 func serveOllamaStatus(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
+	// Prioritise the HTTP check: if Ollama is answering on 11434 it is
+	// unambiguously running, regardless of whether the binary is in PATH
+	// (the sane-backend process inherits PATH at launch, before any install).
 	state := "not_installed"
-	if checkOllamaCLI() {
-		if isOllamaRunning() {
-			state = "running"
-		} else {
-			state = "not_running"
-		}
+	running := isOllamaRunning()
+	if running {
+		state = "running"
+	} else if checkOllamaCLI() {
+		state = "not_running"
 	}
 	ollamaInstall.Lock()
 	ist := ollamaInstall.state
@@ -593,7 +605,9 @@ func serveOllamaInstall(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if checkOllamaCLI() {
+	var body struct{ Force bool }
+	json.NewDecoder(r.Body).Decode(&body)
+	if !body.Force && checkOllamaCLI() {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{"state": "done"})
 		return
@@ -604,19 +618,42 @@ func serveOllamaInstall(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusAccepted)
 		return
 	}
+	ctx, cancel := context.WithCancel(context.Background())
 	ollamaInstall.state = "downloading"
 	ollamaInstall.pct = 0
 	ollamaInstall.msg = "Downloading Ollama…"
+	ollamaInstall.cancel = cancel
 	ollamaInstall.Unlock()
-	go doInstallOllama()
+	go doInstallOllama(ctx)
 	w.WriteHeader(http.StatusAccepted)
 }
 
-func doInstallOllama() {
+func serveOllamaInstallCancel(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	ollamaInstall.Lock()
+	if ollamaInstall.cancel != nil {
+		ollamaInstall.cancel()
+		ollamaInstall.cancel = nil
+	}
+	ollamaInstall.state = ""
+	ollamaInstall.pct = 0
+	ollamaInstall.msg = ""
+	ollamaInstall.Unlock()
+	w.WriteHeader(http.StatusOK)
+}
+
+func doInstallOllama(ctx context.Context) {
 	tmpPath := filepath.Join(os.TempDir(), "OllamaSetup.exe")
 
-	resp, err := http.Get("https://ollama.ai/download/OllamaSetup.exe")
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, "https://ollama.ai/download/OllamaSetup.exe", nil)
+	resp, err := (&http.Client{}).Do(req)
 	if err != nil {
+		if ctx.Err() != nil {
+			return // cancelled — state already reset by serveOllamaInstallCancel
+		}
 		ollamaInstall.Lock()
 		ollamaInstall.state = "error"
 		ollamaInstall.msg = "Download failed: " + err.Error()
@@ -638,6 +675,11 @@ func doInstallOllama() {
 	buf := make([]byte, 32*1024)
 	var downloaded int64
 	for {
+		if ctx.Err() != nil {
+			f.Close()
+			os.Remove(tmpPath)
+			return
+		}
 		n, readErr := resp.Body.Read(buf)
 		if n > 0 {
 			if _, wErr := f.Write(buf[:n]); wErr != nil {
@@ -649,18 +691,25 @@ func doInstallOllama() {
 				return
 			}
 			downloaded += int64(n)
+			ollamaInstall.Lock()
 			if total > 0 {
-				pct := int(float64(downloaded) / float64(total) * 100)
-				ollamaInstall.Lock()
-				ollamaInstall.pct = pct
-				ollamaInstall.Unlock()
+				ollamaInstall.pct = int(float64(downloaded) / float64(total) * 100)
+				ollamaInstall.msg = fmt.Sprintf("%d%%", ollamaInstall.pct)
+			} else {
+				ollamaInstall.msg = fmt.Sprintf("%.0f MB", float64(downloaded)/(1<<20))
 			}
+			ollamaInstall.Unlock()
 		}
 		if readErr != nil {
 			break
 		}
 	}
 	f.Close()
+
+	if ctx.Err() != nil {
+		os.Remove(tmpPath)
+		return
+	}
 
 	ollamaInstall.Lock()
 	ollamaInstall.state = "installing"
@@ -683,12 +732,11 @@ func doInstallOllama() {
 			break
 		}
 	}
-	_ = startOllamaIfNeeded()
 
 	ollamaInstall.Lock()
 	ollamaInstall.state = "done"
 	ollamaInstall.pct = 100
-	ollamaInstall.msg = "Ollama ready!"
+	ollamaInstall.msg = "Restart Sane to activate AI features."
 	ollamaInstall.Unlock()
 }
 
@@ -1214,12 +1262,13 @@ func main() {
 	http.HandleFunc("/ai/ollama/status", withCORS(serveOllamaStatus))
 	http.HandleFunc("/ai/ollama/install", withCORS(serveOllamaInstall))
 	http.HandleFunc("/ai/ollama/install/status", withCORS(serveOllamaInstallStatus))
+	http.HandleFunc("/ai/ollama/install/cancel", withCORS(serveOllamaInstallCancel))
 	http.HandleFunc("/ai/model", withCORS(serveAIDeleteModel))
 	http.HandleFunc("/ping", withCORS(func(w http.ResponseWriter, _ *http.Request) {
 		fmt.Fprint(w, "ok")
 	}))
 	fmt.Fprintln(os.Stderr, "sane backend on :7654")
-	if err := http.ListenAndServe(":7654", nil); err != nil {
+	if err := http.ListenAndServe("127.0.0.1:7654", nil); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

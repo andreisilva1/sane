@@ -50,10 +50,13 @@
   const elAIBadge    = document.getElementById('ai-badge');
 
   // Corner widget refs
-  const elWidget     = document.getElementById('ollama-widget');
-  const elWidgetFill = document.getElementById('ollama-widget-fill');
-  const elWidgetInfo = document.getElementById('ollama-widget-info');
-  const elWidgetTitle= document.getElementById('ollama-widget-title');
+  const elWidget        = document.getElementById('ollama-widget');
+  const elWidgetFill    = document.getElementById('ollama-widget-fill');
+  const elWidgetInfo    = document.getElementById('ollama-widget-info');
+  const elWidgetTitle   = document.getElementById('ollama-widget-title');
+  const elWidgetCancel  = document.getElementById('ollama-widget-cancel');
+
+  elWidgetCancel?.addEventListener('click', cancelOllamaInstall);
 
   // ── State ─────────────────────────────────────────────────
   let installedModels  = new Set();
@@ -96,37 +99,53 @@
   function renderOllamaWarn(status) {
     const { state, installState } = status;
     ollamaState = state;
+    elOllamaWarn.classList.remove('ais-ok');
 
-    if (state === 'not_installed') {
-      if (installState === 'downloading' || installState === 'installing') {
-        elOllamaWarn.innerHTML =
-          `<span class="ais-warn-text">Installing Ollama in background…</span>` +
-          `<button class="ais-install-btn" disabled>Installing…</button>`;
-      } else if (installState === 'error') {
-        elOllamaWarn.innerHTML =
-          `<span class="ais-warn-text">⚠ Ollama install failed.</span>` +
-          `<button class="ais-install-btn" id="ais-install-btn">Retry</button>`;
-        document.getElementById('ais-install-btn')?.addEventListener('click', startOllamaInstall);
-      } else {
-        elOllamaWarn.innerHTML =
-          `<span class="ais-warn-text">⚠ Ollama not found — required for AI features.</span>` +
-          `<button class="ais-install-btn" id="ais-install-btn">Install automatically</button>`;
-        document.getElementById('ais-install-btn')?.addEventListener('click', startOllamaInstall);
-      }
+    if (state !== 'not_installed') {
+      // Ollama is present on this machine
+      elOllamaWarn.classList.add('ais-ok');
+      elOllamaWarn.innerHTML =
+        `<span class="ais-warn-text ais-warn-ok">Ollama detected — download a model below to get started.</span>` +
+        `<button class="ais-install-btn ais-btn-ghost" id="ais-reinstall-btn">Reinstall Ollama</button>`;
+      document.getElementById('ais-reinstall-btn')?.addEventListener('click', () => startOllamaInstall(true));
       elOllamaWarn.classList.remove('hidden');
-    } else {
-      elOllamaWarn.classList.add('hidden');
+      return;
     }
+
+    // state === 'not_installed'
+    if (installState === 'done') {
+      elOllamaWarn.innerHTML =
+        `<span class="ais-warn-text ais-warn-restart">✓ Ollama installed — restart Sane to activate AI features.</span>`;
+    } else if (installState === 'downloading' || installState === 'installing') {
+      elOllamaWarn.innerHTML =
+        `<span class="ais-warn-text">Installing Ollama in background…</span>` +
+        `<button class="ais-install-btn" disabled>Installing…</button>`;
+    } else if (installState === 'error') {
+      elOllamaWarn.innerHTML =
+        `<span class="ais-warn-text">⚠ Ollama install failed.</span>` +
+        `<button class="ais-install-btn" id="ais-install-btn">Retry</button>`;
+      document.getElementById('ais-install-btn')?.addEventListener('click', () => startOllamaInstall(false));
+    } else {
+      elOllamaWarn.innerHTML =
+        `<span class="ais-warn-text">⚠ Ollama not found — required for AI features.</span>` +
+        `<button class="ais-install-btn" id="ais-install-btn">Install automatically</button>`;
+      document.getElementById('ais-install-btn')?.addEventListener('click', () => startOllamaInstall(false));
+    }
+    elOllamaWarn.classList.remove('hidden');
   }
 
   // ── Ollama install ────────────────────────────────────────
-  async function startOllamaInstall() {
+  async function startOllamaInstall(force = false) {
     ollamaInstalling = true;
     renderOllamaWarn({ state: 'not_installed', installState: 'downloading' });
     renderCards();
 
     try {
-      await apiFetch('/ai/ollama/install', { method: 'POST' });
+      await apiFetch('/ai/ollama/install', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ Force: force }),
+      });
     } catch { /* fire and forget */ }
 
     showWidget('Downloading Ollama', 0);
@@ -144,6 +163,15 @@
     elWidget.classList.add('hidden');
   }
 
+  async function cancelOllamaInstall() {
+    clearInterval(installPollTimer);
+    installPollTimer = null;
+    ollamaInstalling = false;
+    hideWidget();
+    try { await apiFetch('/ai/ollama/install/cancel', { method: 'POST' }); } catch {}
+    refresh();
+  }
+
   function pollInstallStatus() {
     clearInterval(installPollTimer);
     installPollTimer = setInterval(async () => {
@@ -152,23 +180,30 @@
         const st   = await res.json();
 
         if (st.state === 'downloading') {
-          showWidget('Downloading Ollama', st.pct, st.pct + '%');
+          const info = st.pct > 0 ? st.pct + '%' : (st.msg || 'Connecting…');
+          showWidget('Downloading Ollama', st.pct, info);
         } else if (st.state === 'installing') {
           showWidget('Installing Ollama', 100, 'Installing…');
         } else if (st.state === 'done') {
           clearInterval(installPollTimer);
+          installPollTimer = null;
           ollamaInstalling = false;
-          showWidget('Ollama Ready', 100, 'Done!');
-          setTimeout(() => {
-            hideWidget();
-            refresh();
-          }, 1500);
+          hideWidget();
+          renderOllamaWarn({ state: 'not_installed', installState: 'done' });
+          renderCards();
         } else if (st.state === 'error') {
           clearInterval(installPollTimer);
+          installPollTimer = null;
           ollamaInstalling = false;
           hideWidget();
           setStatus('Ollama install failed: ' + st.msg, 'err');
           refresh();
+        } else if (!st.state) {
+          // was cancelled externally — stop polling
+          clearInterval(installPollTimer);
+          installPollTimer = null;
+          ollamaInstalling = false;
+          hideWidget();
         }
       } catch {}
     }, 800);
@@ -178,10 +213,12 @@
   async function refresh() {
     const ollamaStatus = await fetchOllamaStatus();
 
-    // If a background install is running, re-attach polling
+    // If a background install is running, re-attach polling; otherwise clear flag
     if (ollamaStatus.installState === 'downloading' || ollamaStatus.installState === 'installing') {
       ollamaInstalling = true;
       if (!installPollTimer) pollInstallStatus();
+    } else {
+      ollamaInstalling = false;
     }
 
     renderOllamaWarn(ollamaStatus);

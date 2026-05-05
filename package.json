@@ -4,9 +4,12 @@
   "version": "0.1.0",
   "scripts": {
     "dev": "tauri dev",
-    "build": "tauri build"
+    "build:backend": "cd backend && go build -ldflags \"-H windowsgui -s -w\" -o ../src-tauri/binaries/sane-backend-x86_64-pc-windows-msvc.exe .",
+    "build:installer-images": "node make-installer-images.js",
+    "build": "npm run build:installer-images && npm run build:backend && tauri build"
   },
   "devDependencies": {
+    "@resvg/resvg-js": "^2.6.2",
     "@tauri-apps/cli": "^2"
   }
 }
