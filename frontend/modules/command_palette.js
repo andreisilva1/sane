@@ -155,6 +155,15 @@
   });
 
   elInput.addEventListener('input', () => { render(); selected = 0; });
+
+  elInput.addEventListener('keydown', e => {
+    const list  = getFiltered();
+    const count = list.length;
+    if (e.key === 'ArrowDown') { e.preventDefault(); setSelected(Math.min(selected + 1, count - 1)); }
+    if (e.key === 'ArrowUp')   { e.preventDefault(); setSelected(Math.max(selected - 1, 0)); }
+    if (e.key === 'Enter')     { e.preventDefault(); pick(selected, list); }
+    if (e.key === 'Escape')    { e.preventDefault(); close(); }
+  });
   elOverlay.addEventListener('mousedown', e => { if (e.target === elOverlay) close(); });
 
   // Expose for other modules
