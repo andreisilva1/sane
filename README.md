@@ -4,12 +4,12 @@
 
 # Sane
 
-**A local-first code editor for Python, HTML, CSS, and JavaScript (for now).**  
+**A local-first code editor for Python, JavaScript, Go, and Java.**  
 Built-in AI. Zero cloud. Keyboard-first.
 
 [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows-0078D4?style=flat-square&logo=windows&logoColor=white)](https://github.com/andreisilva1/sane/releases/latest)
-[![Version](https://img.shields.io/badge/version-0.1.0-22863a?style=flat-square)](https://github.com/andreisilva1/sane/releases/latest)
+[![Version](https://img.shields.io/badge/version-0.2.0-22863a?style=flat-square)](https://github.com/andreisilva1/sane/releases/latest)
 
 [![Tauri](https://img.shields.io/badge/Tauri-24C8D8?style=flat-square&logo=tauri&logoColor=white)](https://tauri.app)
 [![Rust](https://img.shields.io/badge/Rust-000000?style=flat-square&logo=rust&logoColor=white)](https://www.rust-lang.org)
@@ -32,17 +32,19 @@ Sane is the opposite: a focused editor that runs your code, understands it, and 
 ## Features
 
 ### Editor
-- Syntax highlighting for Python, JavaScript, HTML, CSS, JSON, Markdown
+- Syntax highlighting for Python, JavaScript, Go, and Java — each in its own language module
 - Smart indent, auto-pairs, and block indentation
 - Go to Definition, Find References, Rename Symbol
 - Extract Function, Inline Variable, Remove Dead Code
 - Drag-and-drop file and folder management
+- Classic and Friendly UI modes — Friendly adds a VSCode-style menu toolbar
 
 ### Execution
-- Run Python and JavaScript with a single keystroke (`Ctrl+Enter`)
-- Zero configuration — no virtualenv setup required
+- Run Python, JavaScript, Go, and Java with a single keystroke (`Ctrl+Enter`)
+- Zero configuration — Python virtualenvs detected automatically, others use system PATH
+- Java uses single-file execution mode (Java 11+) — no manual `javac` step
 - Integrated terminal with multiple sessions
-- **Execution Timeline** — step through code line by line, inspect variable state at each step
+- **Execution Timeline** — step through Python code line by line, inspect variable state at each step
 - **Run Insight** — automatic one-sentence AI summary of what your code did after each run
 
 ### Built-in AI (fully local)
@@ -56,12 +58,12 @@ Sane is the opposite: a focused editor that runs your code, understands it, and 
 - Your code never leaves your machine
 
 ### Workflow
-- Command palette (`Ctrl+P`) — files and commands in one place
+- Command palette (`Ctrl+Shift+P`) — commands in one place
+- Quick Open (`Ctrl+P`) — jump to any file
 - Global search across files (`Ctrl+Shift+F`)
+- Recent projects — automatically reopens the last folder on launch
 - Fully keyboard-navigable — mouse optional
 - Theme panel with built-in themes and custom color support
-- Floating output window (always-on-top)
-- Grid editor for side-by-side comparison
 - HTML preview with live refresh
 
 ---
@@ -84,14 +86,14 @@ Sane is the opposite: a focused editor that runs your code, understands it, and 
 
 <div align="center">
 
-[![Download Installer](https://img.shields.io/badge/Download%20Installer-.exe-0078D4?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/andreisilva1/sane/releases/latest/download/Sane_0.1.0_x64-setup.exe)
-[![Download MSI](https://img.shields.io/badge/Download%20MSI-.msi-6E40C9?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/andreisilva1/sane/releases/latest/download/Sane_0.1.0_x64_en-US.msi)
+[![Download Installer](https://img.shields.io/badge/Download%20Installer-.exe-0078D4?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/andreisilva1/sane/releases/latest/download/Sane_0.2.0_x64-setup.exe)
+[![Download MSI](https://img.shields.io/badge/Download%20MSI-.msi-6E40C9?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/andreisilva1/sane/releases/latest/download/Sane_0.2.0_x64_en-US.msi)
 
 </div>
 
 | Format | Description |
 |---|---|
-| `.exe` (recommended) | NSIS installer, standard Windows setup experience |
+| `.exe` (recommended) | NSIS installer with custom dark theme |
 | `.msi` | Windows Installer package, suitable for managed deployments |
 
 > macOS and Linux builds are on the roadmap.
@@ -105,58 +107,80 @@ Sane is the opposite: a focused editor that runs your code, understands it, and 
 ```bash
 git clone https://github.com/andreisilva1/sane
 cd sane
-
-# Build the Go backend
-cd backend
-go build -o ../src-tauri/binaries/sane-backend-x86_64-pc-windows-msvc.exe .
-cd ..
-
-# Build the app
-npx tauri build
+.\build.ps1
 ```
 
-Installer output: `src-tauri/target/release/bundle/`
+Or step by step:
+
+```bash
+# Build the Go backend
+cd backend
+go build -ldflags="-s -w" -o ../src-tauri/binaries/sane-backend-x86_64-pc-windows-msvc.exe .
+cd ..
+
+# Build the Tauri app (generates installer in src-tauri/target/release/bundle/)
+npm install
+npm run build
+```
 
 ---
 
 ## Usage
 
 ### Running the editor
-Open the installed app or run `sane.exe` directly.
+Open the installed app or run `sane.exe` directly. The last opened folder is restored automatically.
 
 ### Opening files
-`Ctrl+P` to open any file. Use the sidebar to browse project folders.
+`Ctrl+P` to quick-open any file, or browse the sidebar. In Friendly mode, use the **File** menu.
 
 ### Running code
-Open a `.py` or `.js` file and press `Ctrl+Enter`. Output appears in the integrated panel.
+Open a `.py`, `.js`, `.go`, or `.java` file and press `Ctrl+Enter`. Output streams in real time in the integrated panel. For Python files with `input()`, an inline stdin field appears automatically.
 
 ### Using AI
 1. Open the AI panel (`Ctrl+Shift+A`)
-2. Click the tier button and select a model
+2. Click the model button and select a model
 3. If Ollama isn't installed yet, Sane will offer to install it automatically
 4. Once Ollama is ready, the model downloads in the background — no terminal required
+
+### UI modes
+Switch between **Classic** (minimal, keyboard-first) and **Friendly** (VSCode-style toolbar with File / View / Run / AI menus) using the selector in the top-right corner. The mode is remembered per session.
 
 ### Key shortcuts
 
 | Shortcut | Action |
 |---|---|
-| `Ctrl+P` | Command palette / quick open |
+| `Ctrl+P` | Quick open file |
+| `Ctrl+Shift+P` | Command palette |
 | `Ctrl+Enter` | Run current file |
-| `Ctrl+Shift+A` | Toggle AI panel |
-| `Ctrl+Shift+B` | Toggle Project Builder |
-| `Ctrl+Shift+T` | Execution Timeline |
-| `` Ctrl+` `` | Toggle terminal |
 | `Ctrl+S` | Save file |
 | `Ctrl+B` | Toggle sidebar |
 | `Ctrl+Shift+F` | Search in files |
+| `` Ctrl+` `` | Toggle terminal |
+| `Ctrl+Shift+A` | Toggle AI panel |
+| `Ctrl+Shift+B` | Project Builder |
+| `Ctrl+Shift+V` | HTML preview |
 
 Full reference: [snippets.md](snippets.md)
 
 ---
 
+## Language support
+
+| Language | Run | Trace | Highlight | Autocomplete | Notes |
+|---|---|---|---|---|---|
+| Python | ✓ | ✓ | ✓ | ✓ | Virtualenv auto-detection |
+| JavaScript | ✓ | — | ✓ | ✓ | Requires Node.js |
+| Go | ✓ | — | ✓ | ✓ | Requires Go toolchain |
+| Java | ✓ | — | ✓ | ✓ | Java 11+, single-file mode |
+| HTML / CSS | preview | — | — | — | Live preview via `Ctrl+Shift+V` |
+
+Adding a new language means one backend file (`lang_xxx.go`) and one frontend file (`modules/langs/xxx.js`).
+
+---
+
 ## AI models
 
-Sane runs models locally via Ollama. If Ollama isn't on your machine, Sane installs it for you when you first set up AI. Three built-in tiers:
+Sane runs models locally via Ollama. If Ollama isn't on your machine, Sane installs it for you when you first set up AI.
 
 | Tier | Notes |
 |---|---|
@@ -165,6 +189,21 @@ Sane runs models locally via Ollama. If Ollama isn't on your machine, Sane insta
 | Advanced | Highest quality, requires strong hardware |
 
 Performance depends on your hardware. A modern machine with 16 GB RAM handles the Fast tier well. The Advanced tier benefits from a dedicated GPU.
+
+---
+
+## Changelog
+
+### 0.2.0
+- **Go and Java language support** — run, syntax highlight, and autocomplete
+- **Language module system** — each language lives in its own file (`backend/lang_xxx.go` + `frontend/modules/langs/xxx.js`); adding a new language requires only those two files
+- **Classic / Friendly UI mode** — Friendly mode adds a VSCode-style menu toolbar (File / View / Run / AI)
+- **Recent projects** — history of last 8 folders, auto-reopens the last one on launch
+- **Custom dark installer** — NSIS installer with branded header and sidebar
+- **Ollama install UX** — post-install shows a "restart required" message instead of attempting unreliable auto-start
+
+### 0.1.0
+- Initial release: Python and JavaScript execution, built-in AI via Ollama, execution timeline, project builder, AI refactor, self-healing
 
 ---
 
@@ -180,8 +219,9 @@ If you read the source and see something worth improving, a PR is welcome.
 
 ## Roadmap
 
+- [x] Go and Java language support
 - [ ] macOS and Linux builds
-- [ ] TypeScript, Rust, Go language support
+- [ ] TypeScript and Rust language support
 - [ ] Project-wide AI context
 - [ ] Performance improvements for large files
 - [ ] Plugin system

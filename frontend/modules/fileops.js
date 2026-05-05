@@ -204,4 +204,17 @@
 
   document.getElementById('fo-confirm').addEventListener('click', confirmDialog);
   elBackdrop.addEventListener('click', closeDialog);
+
+  // Delete / Shift+Delete on selected tree item
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Delete') return;
+    const tag = document.activeElement?.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement?.isContentEditable) return;
+    const selected = document.querySelector('.tree-item.selected');
+    if (!selected) return;
+    e.preventDefault();
+    ctxPath  = selected.dataset.path;
+    ctxIsDir = selected.classList.contains('dir');
+    doDelete();
+  });
 })();

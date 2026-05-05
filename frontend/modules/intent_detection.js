@@ -150,6 +150,7 @@
 
   // ── Detect & render ───────────────────────────────────────
   function detect(filePath) {
+    if (window.sane?.aiSettings?.intentDetection === false) { hide(); return; }
     if (!filePath || dismissed.has(filePath)) { hide(); return; }
 
     const code = elEditor.value;

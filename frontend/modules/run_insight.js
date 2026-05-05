@@ -8,6 +8,7 @@
   let abortCtrl = null;
 
   document.addEventListener('sane:runend', async (e) => {
+    if (window.sane?.aiSettings?.insight === false) return;
     const { stdout = '', stderr = '', exitCode, filePath } = e.detail;
 
     elBar.classList.add('hidden');

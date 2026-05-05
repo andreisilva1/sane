@@ -1,30 +1,9 @@
-// ── Autocomplete (feature_reintroduction_autocomplete_v1) ──
-// Pure frontend. Only active for .py files.
-// Shows keyword/builtin suggestions while typing (2+ chars).
+// ── Autocomplete ──────────────────────────────────────────
+// Generic — completions come from window.sane.langs[ext].completions.
+// Language definitions live in modules/langs/*.js.
 
 (function () {
   const elEditor = document.getElementById('editor');
-
-  const KW = [
-    'False','None','True','and','as','assert','async','await',
-    'break','class','continue','def','del','elif','else','except',
-    'finally','for','from','global','if','import','in','is','lambda',
-    'nonlocal','not','or','pass','raise','return','try','while','with','yield',
-  ];
-  const BI = [
-    'abs','all','any','ascii','bin','bool','breakpoint','bytearray','bytes',
-    'callable','chr','classmethod','compile','complex','delattr','dict','dir',
-    'divmod','enumerate','eval','exec','filter','float','format','frozenset',
-    'getattr','globals','hasattr','hash','help','hex','id','input','int',
-    'isinstance','issubclass','iter','len','list','locals','map','max',
-    'memoryview','min','next','object','oct','open','ord','pow','print',
-    'property','range','repr','reversed','round','set','setattr','slice',
-    'sorted','staticmethod','str','sum','super','tuple','type','vars','zip',
-    'Exception','ValueError','TypeError','KeyError','IndexError',
-    'AttributeError','ImportError','OSError','RuntimeError','StopIteration',
-    'NotImplementedError','NameError','ZeroDivisionError','FileNotFoundError',
-  ];
-  const ALL = [...new Set([...KW, ...BI])].sort();
 
   // ── Dropdown element ──────────────────────────────────────
   const elMenu = document.createElement('div');
@@ -32,9 +11,17 @@
   elMenu.className = 'hidden';
   document.body.appendChild(elMenu);
 
-  let active  = false;   // .py file open
-  let items   = [];      // current suggestion list
-  let selIdx  = 0;
+  let active       = false; // a language with completions is open
+  let langWords    = [];    // sorted completions for the current language
+  let items        = [];    // current filtered suggestions
+  let selIdx       = 0;
+
+  function extOf(path) {
+    if (!path) return '';
+    const dot   = path.lastIndexOf('.');
+    const slash = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
+    return dot > slash ? path.slice(dot).toLowerCase() : '';
+  }
 
   // ── State ─────────────────────────────────────────────────
   function wordBefore() {
@@ -55,7 +42,7 @@
     if (word.length < 2) return hide();
 
     const lo = word.toLowerCase();
-    items = ALL.filter(w => w.toLowerCase().startsWith(lo) && w !== word);
+    items = langWords.filter(w => w.toLowerCase().startsWith(lo) && w !== word);
     if (items.length === 0) return hide();
 
     selIdx = 0;
@@ -156,12 +143,14 @@
   elEditor.addEventListener('blur',   () => setTimeout(hide, 100));
   elEditor.addEventListener('scroll', () => { if (!elMenu.classList.contains('hidden')) position(); });
 
-  // ── Enable only for .py files ─────────────────────────────
+  // ── Enable for any language that provides completions ─────
   const prev = window.sane?.onFileOpen;
   window.sane = window.sane || {};
   window.sane.onFileOpen = (path) => {
     if (prev) prev(path);
-    active = !!(path && path.endsWith('.py'));
+    const lang = window.sane.langs?.[extOf(path)];
+    langWords = lang?.completions || [];
+    active    = langWords.length > 0;
     hide();
   };
 })();

@@ -1660,9 +1660,88 @@ kbd {
 .ats-ready   { color: var(--text-dim); }
 .ats-missing { color: var(--text-muted); }
 
+#ai-settings-btn {
+  padding: 0 5px;
+  font-size: 13px;
+  color: var(--text-muted);
+  opacity: 0.7;
+}
+#ai-settings-btn:hover { opacity: 1; }
+
 #ai-close {
   padding: 0 6px;
   font-size: 15px;
+  color: var(--text-muted);
+}
+
+/* ── AI Feature Settings overlay ─────────────────────────── */
+
+#aicfg-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1500;
+  background: rgba(0,0,0,0.55);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+#aicfg-overlay.hidden { display: none; }
+
+#aicfg-box {
+  background: var(--bg2);
+  border: 1px solid var(--border2);
+  border-radius: var(--r-md);
+  width: 340px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+}
+
+#aicfg-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px 10px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+#aicfg-header button {
+  color: var(--text-muted);
+  font-size: 15px;
+  padding: 0 4px;
+}
+
+#aicfg-body {
+  padding: 8px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.aicfg-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+}
+.aicfg-row:hover { background: var(--hover); }
+
+.aicfg-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.aicfg-name {
+  font-size: 12px;
+  color: var(--text);
+}
+.aicfg-desc {
+  font-size: 11px;
   color: var(--text-muted);
 }
 

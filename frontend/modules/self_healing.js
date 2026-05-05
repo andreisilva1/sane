@@ -197,6 +197,7 @@
   elDismiss.addEventListener('click', hide);
 
   document.addEventListener('sane:runend', (e) => {
+    if (window.sane?.aiSettings?.selfHealing === false) return;
     const { stderr = '', stdout = '', exitCode, filePath } = e.detail;
     hide();
     if (exitCode === 0 || !stderr.trim()) return;

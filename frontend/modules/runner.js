@@ -17,12 +17,18 @@
   let runTimer   = null;
   let runSessId  = null;
 
-  // ── Show/hide Run / Trace buttons based on file type ─────
+  // ── Show/hide Run / Trace buttons based on language registry ─
+  function extOf(path) {
+    if (!path) return '';
+    const dot   = path.lastIndexOf('.');
+    const slash = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
+    return dot > slash ? path.slice(dot).toLowerCase() : '';
+  }
+
   function onFileOpen(path) {
-    const canRun   = path && (path.endsWith('.py') || path.endsWith('.js'));
-    const canTrace = path && path.endsWith('.py');
-    elBtnRun.classList.toggle('hidden', !canRun);
-    elBtnTrace.classList.toggle('hidden', !canTrace);
+    const lang = window.sane.langs?.[extOf(path)];
+    elBtnRun.classList.toggle('hidden',   !lang?.canRun);
+    elBtnTrace.classList.toggle('hidden', !lang?.canTrace);
   }
 
   // ── Run ──────────────────────────────────────────────────
@@ -139,6 +145,13 @@
   }
 
   function stop() {
+    if (runSessId) {
+      fetch(API + '/run/stop', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ID: runSessId }),
+      }).catch(() => {});
+    }
     if (runAbort) {
       runAbort.abort();
     }

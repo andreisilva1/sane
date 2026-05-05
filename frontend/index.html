@@ -109,6 +109,7 @@
         <button id="ai-tier-btn" title="Switch AI model">Set up AI</button>
         <div id="ai-tier-menu" class="hidden"></div>
       </div>
+      <button id="ai-settings-btn" title="AI Feature Settings">⚙</button>
       <button id="ai-close" title="Close">×</button>
     </div>
     <div id="ai-messages"></div>
@@ -244,7 +245,7 @@
         <div class="kb-row"><kbd>Ctrl</kbd><kbd>Z</kbd><span>Undo</span></div>
         <div class="kb-row"><kbd>Ctrl</kbd><kbd>Y</kbd><span>Redo</span></div>
         <div class="kb-row"><kbd>Ctrl</kbd><kbd>S</kbd><span>Save file</span></div>
-        <div class="kb-row"><kbd>Ctrl</kbd><kbd>Enter</kbd><span>Run Python / JS file</span></div>
+        <div class="kb-row"><kbd>Ctrl</kbd><kbd>Enter</kbd><span>Run file (Python / JS / Go / Java)</span></div>
         <div class="kb-row"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>V</kbd><span>Preview HTML file</span></div>
         <div class="kb-row"><kbd>Tab</kbd><span>Accept autocomplete / indent</span></div>
 
@@ -291,6 +292,13 @@
 
   <script src="main.js"></script>
   <script src="modules/history.js"></script>
+  <!-- Language registry: base factory first, then one file per language -->
+  <script src="modules/langs/base.js"></script>
+  <script src="modules/langs/python.js"></script>
+  <script src="modules/langs/javascript.js"></script>
+  <script src="modules/langs/go.js"></script>
+  <script src="modules/langs/java.js"></script>
+  <!-- Generic engines that consult the registry -->
   <script src="modules/runner.js"></script>
   <script src="modules/linenumbers.js"></script>
   <script src="modules/highlight.js"></script>
@@ -464,6 +472,40 @@
   <script src="modules/command_palette.js"></script>
   <script src="modules/self_healing.js"></script>
   <script src="modules/run_insight.js"></script>
+
+  <!-- AI Feature Settings overlay -->
+  <div id="aicfg-overlay" class="hidden">
+    <div id="aicfg-box">
+      <div id="aicfg-header">
+        <span>AI Feature Settings</span>
+        <button id="aicfg-close">×</button>
+      </div>
+      <div id="aicfg-body">
+        <label class="aicfg-row">
+          <span class="aicfg-label">
+            <span class="aicfg-name">Run Insight</span>
+            <span class="aicfg-desc">One-sentence AI summary after each run</span>
+          </span>
+          <input type="checkbox" id="aicfg-insight">
+        </label>
+        <label class="aicfg-row">
+          <span class="aicfg-label">
+            <span class="aicfg-name">Self-Healing</span>
+            <span class="aicfg-desc">Fix suggestions when the code exits with an error</span>
+          </span>
+          <input type="checkbox" id="aicfg-healing">
+        </label>
+        <label class="aicfg-row">
+          <span class="aicfg-label">
+            <span class="aicfg-name">Intent Detection</span>
+            <span class="aicfg-desc">Contextual AI actions based on what the file imports</span>
+          </span>
+          <input type="checkbox" id="aicfg-intent">
+        </label>
+      </div>
+    </div>
+  </div>
+  <script src="modules/ai_settings.js"></script>
 
   <!-- Ollama install progress widget (fixed corner) -->
   <div id="ollama-widget" class="hidden">

@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <rect width="1024" height="1024" fill="#111111"/>
+  <!-- Stylized S: two cubic bezier arcs, stroke-based, centered -->
+  <path d="M 672 260
+           C 672 162 352 162 352 352
+           C 352 542 672 542 672 720
+           C 672 888 352 888 352 764"
+        fill="none"
+        stroke="#e2e2e2"
+        stroke-width="82"
+        stroke-linecap="round"
+        stroke-linejoin="round"/>
+</svg>
