@@ -202,6 +202,10 @@
   elRename.addEventListener('click',    () => { hideMenu(); doRename();    });
   elDelete.addEventListener('click',    () => { hideMenu(); doDelete();    });
 
+  window.sane = window.sane || {};
+  window.sane.getCtxPath  = () => ctxPath;
+  window.sane.hideCtxMenu = () => hideMenu();
+
   document.getElementById('fo-confirm').addEventListener('click', confirmDialog);
   elBackdrop.addEventListener('click', closeDialog);
 

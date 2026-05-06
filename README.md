@@ -9,7 +9,7 @@ Built-in AI. Zero cloud. Keyboard-first.
 
 [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows-0078D4?style=flat-square&logo=windows&logoColor=white)](https://github.com/andreisilva1/sane/releases/latest)
-[![Version](https://img.shields.io/badge/version-0.3.3-22863a?style=flat-square)](https://github.com/andreisilva1/sane/releases/latest)
+[![Version](https://img.shields.io/badge/version-0.4.0-22863a?style=flat-square)](https://github.com/andreisilva1/sane/releases/latest)
 
 [![Tauri](https://img.shields.io/badge/Tauri-24C8D8?style=flat-square&logo=tauri&logoColor=white)](https://tauri.app)
 [![Rust](https://img.shields.io/badge/Rust-000000?style=flat-square&logo=rust&logoColor=white)](https://www.rust-lang.org)
@@ -65,7 +65,13 @@ Sane is the opposite: a focused editor that runs your code, understands it, and 
 - **Dev Scheduler** — run shell commands on a recurring interval while Sane is open; persists job definitions across restarts
 - **Port Manager** — detects `EADDRINUSE` on run failure, identifies the owning process, and offers a one-click kill
 - **JSON Viewer** — live validation badge, Format button, and recursive tree view for `.json` files (`Alt+Shift+F`)
-- **Activity Log** — rolling log of all toolkit actions, grouped by day, persisted in `localStorage` (`Ctrl+Shift+G`)
+- **Activity Log** — rolling log of all toolkit actions, grouped by day, persisted in `localStorage` (`Ctrl+Shift+J`)
+
+### Git
+- **Status badges** — M / A / U indicators next to changed files in the tree, updated automatically
+- **Quick diff** — right-click any file → View Diff, or run via command palette; color-coded added/removed lines
+- **One-step commit** — `Ctrl+Shift+G` opens a minimal commit modal; stages everything and commits with a message
+- Auto-hidden for non-Git projects — no clutter if there's no repository
 
 ### Workflow
 - Command palette (`Ctrl+Shift+P`) — commands in one place
@@ -169,10 +175,11 @@ Switch between **Classic** (minimal, keyboard-first) and **Friendly** (VSCode-st
 | `Ctrl+Shift+A` | Toggle AI panel |
 | `Ctrl+Shift+B` | Project Builder |
 | `Ctrl+Shift+V` | HTML preview |
+| `Ctrl+Shift+G` | Git: Commit |
 | `Ctrl+Shift+H` | HTTP Client |
 | `Ctrl+Shift+N` | .env Manager |
 | `Ctrl+Shift+D` | DB Viewer |
-| `Ctrl+Shift+G` | Activity Log |
+| `Ctrl+Shift+J` | Activity Log |
 | `Alt+Shift+F` | Format JSON |
 
 Full reference: [snippets.md](snippets.md)
@@ -209,6 +216,10 @@ Performance depends on your hardware. A modern machine with 16 GB RAM handles th
 
 ## Changelog
 
+### 0.4.0
+- **Git integration** — minimal, invisible Git support: file status badges (M/A/U) in the file tree update automatically; right-click any file → View Diff for a color-coded diff overlay; `Ctrl+Shift+G` opens a commit modal that stages and commits all changes in one step; hidden automatically for non-Git projects
+- **Activity Log** shortcut moved to `Ctrl+Shift+J` (freed `G` for Git)
+
 ### 0.3.3
 - **Project-aware AI** — every chat message automatically receives the project's file tree and contents of key files as context; no toggle needed — the model decides what's relevant
 - **Chat history persistence** — messages are saved to `localStorage` and restored on reload; cleared only via the new ⌫ button (with confirmation)
@@ -230,7 +241,7 @@ Performance depends on your hardware. A modern machine with 16 GB RAM handles th
 - **Dev Scheduler** — schedule shell commands to run on an interval while Sane is open; job definitions saved to `.sane-jobs.json`
 - **Port Manager** — detects port conflicts on run failure, identifies the owning process, and offers a one-click kill
 - **JSON Viewer** — live validation status, Format button (`Alt+Shift+F`), and recursive collapsible tree view for `.json` files
-- **Activity Log** — rolling 300-entry log of all toolkit and AI actions, grouped by day, persisted in `localStorage` (`Ctrl+Shift+G`)
+- **Activity Log** — rolling 300-entry log of all toolkit and AI actions, grouped by day, persisted in `localStorage` (`Ctrl+Shift+J`)
 - **AI Feature Settings** — toggle Run Insight, Self-Healing, and Intent Detection independently via the `⚙` button in the AI panel
 - **Delete key in file tree** — `Delete` or `Shift+Delete` on a selected file triggers the delete flow
 
@@ -263,7 +274,7 @@ If you read the source and see something worth improving, a PR is welcome.
 - [x] Project-wide AI context
 - [ ] macOS and Linux builds
 - [ ] TypeScript, PHP, and Ruby language support
-- [ ] Git integration — file status in tree, quick diff, simple commit flow
+- [x] Git integration — file status in tree, quick diff, simple commit flow
 - [ ] Editor enhancements — multi-cursor, split view, minimap, custom snippets, find & replace with regex
 
 ---

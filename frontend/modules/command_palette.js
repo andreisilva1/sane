@@ -59,8 +59,10 @@
     { label: 'HTTP Client',          icon: '⇄',  keys: 'Ctrl+Shift+H', action: () => key('H', true, true) },
     { label: '.env Manager',         icon: '⚙',  keys: 'Ctrl+Shift+N', action: () => key('N', true, true) },
     { label: 'DB Viewer',            icon: '⊞',  keys: 'Ctrl+Shift+D', action: () => window.sane?.openDBViewer?.() },
-    { label: 'Activity Log',         icon: '📋', keys: 'Ctrl+Shift+G', action: () => key('G', true, true) },
+    { label: 'Activity Log',         icon: '📋', keys: 'Ctrl+Shift+J', action: () => key('J', true, true) },
     { label: 'Dev Scheduler',        icon: '⏲',  keys: '',             action: () => window.sane?.openScheduler?.() },
+    { label: 'Git: Commit',          icon: '↑',  keys: 'Ctrl+Shift+G', action: () => window.sane?.gitOpenCommit?.() },
+    { label: 'Git: View Diff',       icon: '±',  keys: '',             action: () => { const p = state.filePath; if (p) window.sane?.gitShowDiff?.(p); } },
   ];
 
   // ── Filter + render ───────────────────────────────────────

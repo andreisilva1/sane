@@ -20,12 +20,16 @@
 | `Ctrl+Shift+C` | Project Context |
 | `Ctrl+Shift+M` | Project Memory |
 | `Escape` | Close any panel or overlay |
+| **Git** | |
+| `Ctrl+Shift+G` | Commit all changes (opens commit modal) |
+| Right-click file | View Diff — color-coded diff vs HEAD |
 | **Dev Toolkit** | |
 | `Ctrl+Shift+H` | HTTP Client |
 | `Ctrl+Shift+N` | .env Manager |
 | `Ctrl+Shift+D` | DB Viewer (auto-opens when clicking a `.db` / `.sqlite` file) |
-| `Ctrl+Shift+G` | Activity Log |
+| `Ctrl+Shift+J` | Activity Log |
 | `Alt+Shift+F` | Format JSON (when a `.json` file is open) |
+| Command Palette | Git: View Diff (current file) |
 | Command Palette | Port Manager (triggered automatically on port conflict, or open via palette) |
 | Command Palette | Dev Scheduler (open via command palette) |
 

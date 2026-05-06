@@ -70,6 +70,11 @@ func main() {
 	http.HandleFunc("/preview-dir/", withCORS(servePreviewDir))
 
 	// ── AI / Ollama ───────────────────────────────────────────
+	http.HandleFunc("/git/is-repo", withCORS(serveGitIsRepo))
+	http.HandleFunc("/git/status",  withCORS(serveGitStatus))
+	http.HandleFunc("/git/diff",    withCORS(serveGitDiff))
+	http.HandleFunc("/git/commit",  withCORS(serveGitCommit))
+
 	http.HandleFunc("/ai/project-context",        withCORS(serveAIProjectContext))
 	http.HandleFunc("/ai/ask",                   withCORS(serveAIAsk))
 	http.HandleFunc("/ai/check",                 withCORS(serveAICheck))

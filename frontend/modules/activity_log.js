@@ -88,9 +88,9 @@
     renderLog();
   });
 
-  // ── Ctrl+Shift+G ──────────────────────────────────────────
+  // ── Ctrl+Shift+J ──────────────────────────────────────────
   document.addEventListener('keydown', (e) => {
-    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'G') {
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'J') {
       e.preventDefault();
       elOverlay.classList.contains('hidden') ? open() : close();
     }

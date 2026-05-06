@@ -201,7 +201,7 @@
   }
 
   function clearHistory() {
-    if (!confirm('Limpar todo o histórico do chat?')) return;
+    if (!confirm('Clear all chat history?')) return;
     elMessages.innerHTML = '';
     localStorage.removeItem(CHAT_KEY);
   }

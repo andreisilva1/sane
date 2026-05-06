@@ -74,6 +74,7 @@ async function loadFolder(dir) {
     setStatus('Folder loaded', 'ok');
     pushRecent(dir);
     document.body.classList.add('has-folder');
+    document.dispatchEvent(new CustomEvent('sane:folder-loaded'));
   } catch (err) {
     setStatus('Failed to load folder: ' + err.message, 'err');
   }
@@ -108,20 +109,13 @@ function getExpandedPaths() {
   return paths;
 }
 
-function restoreExpandedPaths(paths) {
-  if (!paths.size) return;
-  elTree.querySelectorAll('.tree-item.dir').forEach(row => {
-    if (paths.has(row.dataset.path)) row.click();
-  });
-}
-
 // ── File tree ─────────────────────────────────────────────
-function renderTree(nodes) {
+function renderTree(nodes, preExpanded = new Set()) {
   elTree.innerHTML = '';
-  buildTreeNodes(nodes || [], elTree, 0);
+  buildTreeNodes(nodes || [], elTree, 0, preExpanded);
 }
 
-function buildTreeNodes(nodes, container, depth) {
+function buildTreeNodes(nodes, container, depth, preExpanded = new Set()) {
   for (const node of nodes) {
     const row = document.createElement('div');
     row.className = 'tree-item' + (node.isDir ? ' dir' : '');
@@ -144,11 +138,12 @@ function buildTreeNodes(nodes, container, depth) {
     row.setAttribute('tabindex', '0');
 
     if (node.isDir) {
-      let expanded = false;
+      let expanded = preExpanded.has(node.path);
       const childWrap = document.createElement('div');
-      childWrap.className = 'tree-children hidden';
+      childWrap.className = expanded ? 'tree-children' : 'tree-children hidden';
+      icon.textContent = expanded ? '▾' : '▸';
       if (node.children && node.children.length > 0) {
-        buildTreeNodes(node.children, childWrap, depth + 1);
+        buildTreeNodes(node.children, childWrap, depth + 1, preExpanded);
       }
 
       function toggleDir() {
@@ -385,7 +380,7 @@ window.sane.refreshTree = async function () {
     const res   = await apiFetch('/files?path=' + encodeURIComponent(state.folder));
     const nodes = await res.json() || [];
     _treeSnapshot = JSON.stringify(nodes);
-    renderTree(nodes);
+    renderTree(nodes, getExpandedPaths());
   } catch (err) {
     setStatus('Refresh failed: ' + err.message, 'err');
   }
@@ -412,9 +407,8 @@ setInterval(async () => {
     const nodes    = await res.json() || [];
     const snapshot = JSON.stringify(nodes);
     if (snapshot === _treeSnapshot) return;
-    _treeSnapshot = snapshot;
     const expanded = getExpandedPaths();
-    renderTree(nodes);
-    restoreExpandedPaths(expanded);
+    _treeSnapshot = snapshot;
+    renderTree(nodes, expanded);
   } catch {}
 }, 3000);

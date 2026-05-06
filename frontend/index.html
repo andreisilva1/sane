@@ -117,7 +117,34 @@
     <div class="fo-item" id="fo-new-folder">New Folder</div>
     <div class="fo-sep fo-sep-rename hidden"></div>
     <div class="fo-item fo-sep-rename hidden" id="fo-rename">Rename</div>
+    <div class="fo-item fo-sep-rename hidden" id="fo-diff">View Diff</div>
     <div class="fo-item fo-danger fo-sep-rename hidden" id="fo-delete">Delete</div>
+  </div>
+
+  <!-- Git: Diff overlay -->
+  <div id="git-diff-overlay" class="hidden">
+    <div id="git-diff-panel">
+      <div id="git-diff-header">
+        <span id="git-diff-title"></span>
+        <button id="git-diff-close">×</button>
+      </div>
+      <div id="git-diff-body"></div>
+    </div>
+  </div>
+
+  <!-- Git: Commit modal -->
+  <div id="git-commit-overlay" class="hidden">
+    <div id="git-commit-modal">
+      <div id="git-commit-header">
+        <span>Commit changes</span>
+        <button id="git-commit-close">×</button>
+      </div>
+      <textarea id="git-commit-msg" placeholder="Commit message… (Ctrl+Enter to commit)" rows="3" spellcheck="false"></textarea>
+      <div id="git-commit-foot">
+        <span id="git-commit-status"></span>
+        <button id="git-commit-btn">✓ Commit all</button>
+      </div>
+    </div>
   </div>
 
   <!-- AI Panel -->
@@ -131,7 +158,7 @@
         <div id="ai-tier-menu" class="hidden"></div>
       </div>
       <button id="ai-settings-btn" title="AI Feature Settings">⚙</button>
-      <button id="ai-clear" title="Limpar histórico do chat">⌫</button>
+      <button id="ai-clear" title="Clear chat history">⌫</button>
       <button id="ai-close" title="Close">×</button>
     </div>
     <div id="ai-messages"></div>
@@ -304,11 +331,15 @@
         <div class="kb-row"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>L</kbd><span>Inline Variable</span></div>
         <div class="kb-row"><kbd>Ctrl</kbd><kbd>,</kbd><span>Theme</span></div>
 
+        <div class="kb-section">Git</div>
+        <div class="kb-row"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>G</kbd><span>Git: Commit all changes</span></div>
+        <div class="kb-row"><span style="font-size:11px;color:var(--text-muted)">Right-click file → View Diff</span></div>
+
         <div class="kb-section">Dev Toolkit</div>
         <div class="kb-row"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>H</kbd><span>HTTP Client</span></div>
         <div class="kb-row"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>N</kbd><span>.env Manager</span></div>
         <div class="kb-row"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>D</kbd><span>DB Viewer</span></div>
-        <div class="kb-row"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>G</kbd><span>Activity Log</span></div>
+        <div class="kb-row"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>J</kbd><span>Activity Log</span></div>
         <div class="kb-row"><kbd>Alt</kbd><kbd>Shift</kbd><kbd>F</kbd><span>Format JSON</span></div>
 
         <div class="kb-section">Terminal</div>
@@ -647,6 +678,7 @@
   <script src="modules/scheduler.js"></script>
   <script src="modules/activity_log.js"></script>
   <script src="modules/db_viewer.js"></script>
+  <script src="modules/git.js"></script>
 
   <!-- Ollama install progress widget (fixed corner) -->
   <div id="ollama-widget" class="hidden">
