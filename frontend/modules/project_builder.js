@@ -140,7 +140,7 @@
   // ── Review card ───────────────────────────────────────────
   function buildReviewCard(p, desc, onRebuild, onBuild) {
     const card = document.createElement('div');
-    card.className = 'ai-msg pb-card';
+    card.className = 'pb-card';
 
     const filesHtml = p.steps.map(s =>
       `<div class="pb-card-file">` +
@@ -207,7 +207,9 @@
         (d, fb) => generatePlan(d, fb),
         () => executePlan()
       );
-      window.sane.aiAddElement(card);
+      const elMessages = document.getElementById('ai-messages');
+      elMessages.appendChild(card);
+      elMessages.scrollTop = elMessages.scrollHeight;
       activeCard = card;
       window.sane.aiLockInput(false);
 

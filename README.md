@@ -9,7 +9,7 @@ Built-in AI. Zero cloud. Keyboard-first.
 
 [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows-0078D4?style=flat-square&logo=windows&logoColor=white)](https://github.com/andreisilva1/sane/releases/latest)
-[![Version](https://img.shields.io/badge/version-0.2.0-22863a?style=flat-square)](https://github.com/andreisilva1/sane/releases/latest)
+[![Version](https://img.shields.io/badge/version-0.3.0-22863a?style=flat-square)](https://github.com/andreisilva1/sane/releases/latest)
 
 [![Tauri](https://img.shields.io/badge/Tauri-24C8D8?style=flat-square&logo=tauri&logoColor=white)](https://tauri.app)
 [![Rust](https://img.shields.io/badge/Rust-000000?style=flat-square&logo=rust&logoColor=white)](https://www.rust-lang.org)
@@ -57,6 +57,15 @@ Sane is the opposite: a focused editor that runs your code, understands it, and 
 - Quick Fix and AI Fix on editor errors
 - Your code never leaves your machine
 
+### Dev Toolkit
+- **HTTP Client** — send any HTTP request directly from the editor, JSON auto-formatted (`Ctrl+Shift+H`)
+- **.env Manager** — browse, edit, and activate `.env` files; sensitive values masked by default; detects vars referenced in open file (`Ctrl+Shift+N`)
+- **DB Viewer** — browse SQLite databases: table list, paginated rows, ad-hoc query runner (`Ctrl+Shift+D`)
+- **Dev Scheduler** — run shell commands on a recurring interval while Sane is open; persists job definitions across restarts
+- **Port Manager** — detects `EADDRINUSE` on run failure, identifies the owning process, and offers a one-click kill
+- **JSON Viewer** — live validation badge, Format button, and recursive tree view for `.json` files (`Alt+Shift+F`)
+- **Activity Log** — rolling log of all toolkit actions, grouped by day, persisted in `localStorage` (`Ctrl+Shift+G`)
+
 ### Workflow
 - Command palette (`Ctrl+Shift+P`) — commands in one place
 - Quick Open (`Ctrl+P`) — jump to any file
@@ -86,8 +95,8 @@ Sane is the opposite: a focused editor that runs your code, understands it, and 
 
 <div align="center">
 
-[![Download Installer](https://img.shields.io/badge/Download%20Installer-.exe-0078D4?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/andreisilva1/sane/releases/latest/download/Sane_0.2.0_x64-setup.exe)
-[![Download MSI](https://img.shields.io/badge/Download%20MSI-.msi-6E40C9?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/andreisilva1/sane/releases/latest/download/Sane_0.2.0_x64_en-US.msi)
+[![Download Installer](https://img.shields.io/badge/Download%20Installer-.exe-0078D4?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/andreisilva1/sane/releases/latest/download/Sane_0.3.0_x64-setup.exe)
+[![Download MSI](https://img.shields.io/badge/Download%20MSI-.msi-6E40C9?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/andreisilva1/sane/releases/latest/download/Sane_0.3.0_x64_en-US.msi)
 
 </div>
 
@@ -159,6 +168,11 @@ Switch between **Classic** (minimal, keyboard-first) and **Friendly** (VSCode-st
 | `Ctrl+Shift+A` | Toggle AI panel |
 | `Ctrl+Shift+B` | Project Builder |
 | `Ctrl+Shift+V` | HTML preview |
+| `Ctrl+Shift+H` | HTTP Client |
+| `Ctrl+Shift+N` | .env Manager |
+| `Ctrl+Shift+D` | DB Viewer |
+| `Ctrl+Shift+G` | Activity Log |
+| `Alt+Shift+F` | Format JSON |
 
 Full reference: [snippets.md](snippets.md)
 
@@ -193,6 +207,17 @@ Performance depends on your hardware. A modern machine with 16 GB RAM handles th
 ---
 
 ## Changelog
+
+### 0.3.0
+- **HTTP Client** — proxy any HTTP request through the backend, color-coded status, JSON pretty-print (`Ctrl+Shift+H`)
+- **.env Manager** — list/edit/activate `.env` files, sensitive key masking, missing var detection, active env injected into every run (`Ctrl+Shift+N`)
+- **DB Viewer** — browse SQLite tables with pagination and ad-hoc query runner; pure-Go driver, no extra tools required (`Ctrl+Shift+D`)
+- **Dev Scheduler** — schedule shell commands to run on an interval while Sane is open; job definitions saved to `.sane-jobs.json`
+- **Port Manager** — detects port conflicts on run failure, identifies the owning process, and offers a one-click kill
+- **JSON Viewer** — live validation status, Format button (`Alt+Shift+F`), and recursive collapsible tree view for `.json` files
+- **Activity Log** — rolling 300-entry log of all toolkit and AI actions, grouped by day, persisted in `localStorage` (`Ctrl+Shift+G`)
+- **AI Feature Settings** — toggle Run Insight, Self-Healing, and Intent Detection independently via the `⚙` button in the AI panel
+- **Delete key in file tree** — `Delete` or `Shift+Delete` on a selected file triggers the delete flow
 
 ### 0.2.0
 - **Go and Java language support** — run, syntax highlight, and autocomplete

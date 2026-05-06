@@ -159,6 +159,8 @@ function buildTreeNodes(nodes, container, depth) {
 }
 
 // ── Open File ─────────────────────────────────────────────
+const BINARY_EXTS = /\.(db|sqlite|sqlite3|png|jpg|jpeg|gif|bmp|ico|webp|pdf|zip|tar|gz|exe|dll|so)$/i;
+
 async function openFile(path, rowEl) {
   setStatus('Opening…', 'info');
 
@@ -171,18 +173,29 @@ async function openFile(path, rowEl) {
     if (!ok) return;
   }
 
+  state.filePath = path;
+  elCurrentFile.textContent = path.split(/[/\\]/).pop();
+  elHeaderSep.classList.remove('hidden');
+
+  // Binary / non-text files: delegate entirely to onFileOpen hooks, skip editor loading
+  if (BINARY_EXTS.test(path)) {
+    state.content = '';
+    state.dirty   = false;
+    elEditor.value = '';
+    setStatus('');
+    if (window.sane?.onFileOpen) window.sane.onFileOpen(path);
+    return;
+  }
+
   try {
     const res = await apiFetch('/file?path=' + encodeURIComponent(path));
     const content = await res.text();
 
-    state.filePath = path;
     state.content  = content;
     state.dirty    = false;
 
     elEditor.value = content;
     elEditor.disabled = false;
-    elCurrentFile.textContent = path.split(/[/\\]/).pop();
-    elHeaderSep.classList.remove('hidden');
     elBtnSave.disabled = true;
     setStatus('');
     if (window.sane?.onFileOpen) window.sane.onFileOpen(path);

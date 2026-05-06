@@ -5,24 +5,26 @@
 | Shortcut | Action |
 |---|---|
 | `Ctrl+P` | Quick Open / Command Palette (prefix `>` for commands) |
-| `Ctrl+N` | New file dialog |
-| `Ctrl+Shift+N` | New folder dialog |
 | `Ctrl+S` | Save current file |
 | `Ctrl+B` | Toggle sidebar |
-| `Ctrl+Enter` | Run current Python file |
-| `Ctrl+Shift+K` | Kill running Python execution |
-| `Ctrl+`` ` `` | Toggle terminal |
+| `Ctrl+Enter` | Run current file (Python / JS / Go / Java) |
+| `` Ctrl+` `` | Toggle terminal |
 | `Ctrl+Shift+F` | Global search (search in files) |
-| `Ctrl+Shift+O` | Pop-out Output window (always-on-top floating window) |
 | `Ctrl+,` | Theme panel |
-| `Ctrl+Alt+G` | Grid Editor |
-| `Ctrl+Alt+F` | Toggle Free Mode (resize handles + layout badge) |
-| `Ctrl+Shift+I` | AI Refactor (Python files, requires active model) |
+| `Ctrl+Shift+I` | AI Refactor |
 | `Ctrl+Shift+A` | Toggle AI panel |
 | `Ctrl+Shift+B` | Toggle Project Builder mode |
-| `Ctrl+Shift+P` | Toggle HTML Preview |
-| `Ctrl+Shift+T` | Execution Timeline (Python files) |
-| `Escape` | Cancel active AI stream (AI panel open) · Close AI panel (idle) · Cancel trace · Close timeline |
+| `Ctrl+Shift+V` | Toggle HTML Preview |
+| `Ctrl+Shift+T` | Task Mode / Execution Timeline |
+| `Ctrl+Shift+C` | Project Context |
+| `Ctrl+Shift+M` | Project Memory |
+| `Escape` | Close any panel or overlay |
+| **Dev Toolkit** | |
+| `Ctrl+Shift+H` | HTTP Client |
+| `Ctrl+Shift+N` | .env Manager |
+| `Ctrl+Shift+D` | DB Viewer |
+| `Ctrl+Shift+G` | Activity Log |
+| `Alt+Shift+F` | Format JSON (when a .json file is open) |
 
 ## Editor
 
@@ -101,7 +103,7 @@
 |---|---|
 | `Right-click` file or folder | Context menu: New File, New Folder, Rename, Delete |
 | `F2` | Rename selected file or folder |
-| `Ctrl+Shift+N` | New folder dialog (in current root) |
+| `Delete` / `Shift+Delete` | Delete selected file or folder |
 | Drag file / folder → folder | Move item into target folder |
 
 ## Execution Timeline (Ctrl+Shift+T)

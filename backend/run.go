@@ -185,6 +185,12 @@ func serveRun(w http.ResponseWriter, r *http.Request) {
 
 	start := time.Now()
 	cmd, label, err := runner(r.Context(), body, emit)
+	// Inject active .env variables into the process environment.
+	if cmd != nil {
+		if envVars := GetActiveEnv(); len(envVars) > 0 {
+			cmd.Env = append(cmd.Env, envVars...)
+		}
+	}
 	writeEvent(map[string]any{"type": "info", "venv": label})
 	if err != nil || cmd == nil {
 		writeEvent(map[string]any{"type": "done", "exitCode": 1, "duration": time.Since(start).Milliseconds()})

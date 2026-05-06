@@ -87,6 +87,27 @@
                     placeholder="Open a folder, then click a file to edit."></textarea>
         </div>
       </div>
+
+      <!-- DB Viewer — replaces editor for .db / .sqlite files -->
+      <div id="dv-panel" class="hidden">
+        <div id="dv-header">
+          <span id="dv-title">DB —</span>
+          <span id="dv-path"></span>
+        </div>
+        <div id="dv-body">
+          <div id="dv-sidebar">
+            <div id="dv-tables"></div>
+          </div>
+          <div id="dv-main">
+            <div id="dv-query-row">
+              <textarea id="dv-query" rows="2" spellcheck="false" placeholder="SELECT * FROM …  (Ctrl+Enter to run)"></textarea>
+              <button id="dv-run-query" title="Run (Ctrl+Enter)">Run</button>
+            </div>
+            <div id="dv-grid"></div>
+            <div id="dv-pager"></div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -281,6 +302,13 @@
         <div class="kb-row"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>E</kbd><span>Extract Function</span></div>
         <div class="kb-row"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>L</kbd><span>Inline Variable</span></div>
         <div class="kb-row"><kbd>Ctrl</kbd><kbd>,</kbd><span>Theme</span></div>
+
+        <div class="kb-section">Dev Toolkit</div>
+        <div class="kb-row"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>H</kbd><span>HTTP Client</span></div>
+        <div class="kb-row"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>N</kbd><span>.env Manager</span></div>
+        <div class="kb-row"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>D</kbd><span>DB Viewer</span></div>
+        <div class="kb-row"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>G</kbd><span>Activity Log</span></div>
+        <div class="kb-row"><kbd>Alt</kbd><kbd>Shift</kbd><kbd>F</kbd><span>Format JSON</span></div>
 
         <div class="kb-section">Terminal</div>
         <div class="kb-row"><kbd>↑</kbd><kbd>↓</kbd><span>Command history</span></div>
@@ -506,6 +534,118 @@
     </div>
   </div>
   <script src="modules/ai_settings.js"></script>
+
+  <!-- HTTP Client panel -->
+  <div id="hc-panel" class="hidden">
+    <div id="hc-header">
+      <span id="hc-title">HTTP Client</span>
+      <button id="hc-close" title="Close">×</button>
+    </div>
+    <div id="hc-form">
+      <div class="hc-row">
+        <select id="hc-method">
+          <option>GET</option>
+          <option>POST</option>
+          <option>PUT</option>
+          <option>PATCH</option>
+          <option>DELETE</option>
+        </select>
+        <input id="hc-url" type="text" placeholder="https://…" spellcheck="false" autocomplete="off">
+        <button id="hc-send">Send</button>
+      </div>
+      <div class="hc-field">
+        <label>Headers <span class="hc-hint">(Key: Value, one per line)</span></label>
+        <textarea id="hc-headers" rows="3" spellcheck="false" placeholder="Content-Type: application/json"></textarea>
+      </div>
+      <div class="hc-field hidden">
+        <label>Body</label>
+        <textarea id="hc-body" rows="5" spellcheck="false" placeholder='{"key": "value"}'></textarea>
+      </div>
+    </div>
+    <div id="hc-response">
+      <div id="hc-res-meta">
+        <span id="hc-res-status"></span>
+        <span id="hc-res-duration"></span>
+      </div>
+      <pre id="hc-res-body"></pre>
+    </div>
+  </div>
+
+  <!-- .env Manager overlay -->
+  <div id="env-overlay" class="hidden">
+    <div id="env-box">
+      <div id="env-header">
+        <span id="env-title">.env Manager</span>
+        <span id="env-active-badge" class="hidden"></span>
+        <button id="env-close" title="Close">×</button>
+      </div>
+      <div id="env-body">
+        <div id="env-sidebar">
+          <div id="env-files"></div>
+          <div id="env-file-actions">
+            <button id="env-activate-btn">Activate</button>
+            <button id="env-deactivate-btn">Deactivate</button>
+          </div>
+        </div>
+        <div id="env-main">
+          <div id="env-entries"></div>
+          <div id="env-missing"></div>
+          <div id="env-add-row">
+            <input id="env-add-key" type="text" placeholder="KEY" spellcheck="false" autocomplete="off">
+            <input id="env-add-val" type="text" placeholder="value" spellcheck="false" autocomplete="off">
+            <button id="env-add-btn">Add</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Port Manager notification bar -->
+  <div id="pm-bar" class="hidden">
+    <span id="pm-text"></span>
+    <button id="pm-kill" class="btn-danger">Kill Process</button>
+    <button id="pm-dismiss">Dismiss</button>
+  </div>
+
+  <!-- Scheduler overlay -->
+  <div id="sched-overlay" class="hidden">
+    <div id="sched-box">
+      <div id="sched-header">
+        <span id="sched-title">Dev Scheduler</span>
+        <button id="sched-close" title="Close">×</button>
+      </div>
+      <div id="sched-notice">Jobs run while Sane is open. Closing Sane stops all jobs.</div>
+      <div id="sched-list"></div>
+      <div id="sched-form">
+        <input id="sched-label" type="text" placeholder="Label (optional)" spellcheck="false" autocomplete="off">
+        <input id="sched-cmd"   type="text" placeholder="Command" spellcheck="false" autocomplete="off">
+        <input id="sched-interval" type="number" min="0.1" step="0.1" placeholder="Interval (min)" style="width:110px">
+        <button id="sched-add-btn">Add</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Activity Log overlay -->
+  <div id="alog-overlay" class="hidden">
+    <div id="alog-box">
+      <div id="alog-header">
+        <span id="alog-title">Activity Log</span>
+        <button id="alog-clear">Clear</button>
+        <button id="alog-close" title="Close">×</button>
+      </div>
+      <div id="alog-body"></div>
+    </div>
+  </div>
+
+  <!-- DB Viewer overlay -->
+
+  <script src="modules/json_viewer.js"></script>
+  <script src="modules/http_client.js"></script>
+  <script src="modules/env_manager.js"></script>
+  <script src="modules/port_manager.js"></script>
+  <script src="modules/scheduler.js"></script>
+  <script src="modules/activity_log.js"></script>
+  <script src="modules/db_viewer.js"></script>
 
   <!-- Ollama install progress widget (fixed corner) -->
   <div id="ollama-widget" class="hidden">

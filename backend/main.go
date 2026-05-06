@@ -47,6 +47,25 @@ func main() {
 	http.HandleFunc("/shell",       withCORS(serveShell))
 	http.HandleFunc("/shell/stdin", withCORS(serveShellStdin))
 
+	// ── Dev toolkit ───────────────────────────────────────────
+	http.HandleFunc("/http-client",      withCORS(serveHTTPClient))
+	http.HandleFunc("/env/list",         withCORS(serveEnvList))
+	http.HandleFunc("/env/read",         withCORS(serveEnvRead))
+	http.HandleFunc("/env/write",        withCORS(serveEnvWrite))
+	http.HandleFunc("/env/activate",     withCORS(serveEnvActivate))
+	http.HandleFunc("/env/detect",       withCORS(serveEnvDetect))
+	http.HandleFunc("/port/owner",       withCORS(servePortOwner))
+	http.HandleFunc("/port/kill",        withCORS(servePortKill))
+	http.HandleFunc("/schedule/list",    withCORS(serveScheduleList))
+	http.HandleFunc("/schedule/add",     withCORS(serveScheduleAdd))
+	http.HandleFunc("/schedule/toggle",  withCORS(serveScheduleToggle))
+	http.HandleFunc("/schedule/delete",  withCORS(serveScheduleDelete))
+	http.HandleFunc("/schedule/load",    withCORS(serveScheduleLoad))
+	http.HandleFunc("/schedule/save",    withCORS(serveScheduleSave))
+	http.HandleFunc("/db/tables",        withCORS(serveDBTables))
+	http.HandleFunc("/db/rows",          withCORS(serveDBRows))
+	http.HandleFunc("/db/query",         withCORS(serveDBQuery))
+
 	// ── HTML preview ──────────────────────────────────────────
 	http.HandleFunc("/preview-dir/", withCORS(servePreviewDir))
 

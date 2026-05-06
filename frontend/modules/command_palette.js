@@ -56,6 +56,11 @@
     { label: 'Focus Editor',         icon: '✏',  keys: 'Ctrl+1',       action: () => document.getElementById('editor').focus() },
     { label: 'Focus File Explorer',  icon: '📂', keys: 'Ctrl+2',       action: focusTree },
     { label: 'Focus Terminal',       icon: '>_', keys: 'Ctrl+3',       action: focusTerminal },
+    { label: 'HTTP Client',          icon: '⇄',  keys: 'Ctrl+Shift+H', action: () => key('H', true, true) },
+    { label: '.env Manager',         icon: '⚙',  keys: 'Ctrl+Shift+N', action: () => key('N', true, true) },
+    { label: 'DB Viewer',            icon: '⊞',  keys: 'Ctrl+Shift+D', action: () => window.sane?.openDBViewer?.() },
+    { label: 'Activity Log',         icon: '📋', keys: 'Ctrl+Shift+G', action: () => key('G', true, true) },
+    { label: 'Dev Scheduler',        icon: '⏲',  keys: '',             action: () => window.sane?.openScheduler?.() },
   ];
 
   // ── Filter + render ───────────────────────────────────────
