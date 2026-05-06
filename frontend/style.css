@@ -1669,11 +1669,48 @@ kbd {
 }
 #ai-settings-btn:hover { opacity: 1; }
 
+#ai-clear {
+  padding: 0 6px;
+  font-size: 13px;
+  color: var(--text-muted);
+  opacity: 0.6;
+}
+#ai-clear:hover { opacity: 1; color: var(--danger); }
+
 #ai-close {
   padding: 0 6px;
   font-size: 15px;
   color: var(--text-muted);
 }
+
+/* ── Per-message delete button ───────────────────────────── */
+.ai-msg {
+  position: relative;
+}
+
+.ai-msg-del {
+  display: none;
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  background: var(--bg4);
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 18px;
+  color: var(--text-dim);
+}
+.ai-msg-del::after { content: '×'; }
+.ai-msg-del:hover { background: var(--danger-bg); color: var(--danger); }
+
+.ai-msg:hover .ai-msg-del,
+.ai-separator:hover .ai-msg-del { display: block; }
+
+.ai-separator { position: relative; }
 
 /* ── AI Feature Settings overlay ─────────────────────────── */
 
@@ -3109,6 +3146,31 @@ kbd {
   cursor: pointer;
 }
 .pb-resume-discard:hover { color: var(--danger); border-color: var(--danger); }
+
+.pb-resolved-continue {
+  border-left-color: var(--success);
+  opacity: 0.7;
+}
+.pb-resolved-continue .pb-resume-title { color: var(--success); }
+
+.pb-resolved-discard {
+  border-left-color: var(--danger);
+  opacity: 0.7;
+}
+.pb-resolved-discard .pb-resume-title { color: var(--danger); }
+
+/* ── PB review card: reject button ──────────────────────── */
+.pb-card-reject {
+  font-size: 11px;
+  padding: 5px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--border2);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  margin-left: auto;
+}
+.pb-card-reject:hover { color: var(--danger); border-color: var(--danger); background: var(--danger-bg); }
 
 /* ── Sidebar resize handle ────────────────────────────────── */
 

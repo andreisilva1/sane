@@ -188,6 +188,7 @@
         `<input class="pb-card-feedback" type="text" placeholder="Feedback to refine plan… (Enter to rebuild)" spellcheck="false" autocomplete="off">` +
         `<button class="pb-card-rebuild">↺ Rebuild</button>` +
         `<button class="pb-card-build">▶ Build</button>` +
+        `<button class="pb-card-reject">✕ Reject</button>` +
       `</div>`;
 
     const feedback = card.querySelector('.pb-card-feedback');
@@ -198,6 +199,12 @@
       if (e.key === 'Enter') { e.preventDefault(); onRebuild(desc, feedback.value.trim()); }
     });
     card.querySelector('.pb-card-build').addEventListener('click', () => onBuild());
+    card.querySelector('.pb-card-reject').addEventListener('click', () => {
+      disableCard(card);
+      clearSavedBuild();
+      plan = null;
+      addMsg('ai-pb-system', '— plano rejeitado —');
+    });
 
     return card;
   }
@@ -342,7 +349,9 @@
         addMsg('ai-pb-error', '⚠ Open the project folder first, then continue.');
         return;
       }
-      card.remove();
+      card.querySelector('.pb-resume-title').textContent = '▶ Build continued';
+      card.classList.add('pb-resolved-continue');
+      card.querySelectorAll('button').forEach(b => b.disabled = true);
       plan = savedPlan;
       window.sane.aiOpenPanel?.();
       executePlan(startIdx);
@@ -350,7 +359,9 @@
 
     card.querySelector('.pb-resume-discard').addEventListener('click', () => {
       clearSavedBuild();
-      card.remove();
+      card.querySelector('.pb-resume-title').textContent = '✕ Build discarded';
+      card.classList.add('pb-resolved-discard');
+      card.querySelectorAll('button').forEach(b => b.disabled = true);
     });
 
     return card;

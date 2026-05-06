@@ -23,6 +23,10 @@
   let pbMode       = false;
   let pbLocked     = false;
 
+  // ── Chat history persistence ──────────────────────────────
+  const CHAT_KEY    = 'sane_chat_history';
+  let _savePaused   = false;
+
   // ── Shared model accessor (used by task_mode.js) ──────────
   function getActiveTier() { return TIERS.find(t => t.id === activeTierId) || null; }
   function getModel()      { return getActiveTier()?.model || null; }
@@ -170,13 +174,55 @@
     elPanel.classList.contains('hidden') ? open() : close();
   }
 
+  // ── History: save / restore / clear ──────────────────────
+  function saveHistory() {
+    if (_savePaused) return;
+    const entries = [];
+    elMessages.querySelectorAll(':scope > .ai-msg, :scope > .ai-separator').forEach(el => {
+      if (el.classList.contains('ai-separator')) {
+        entries.push({ kind: 'sep', text: el.textContent.trim() });
+      } else {
+        const role = [...el.classList].find(c => c.startsWith('ai-') && c !== 'ai-msg' && c !== 'ai-streaming' && c !== 'ai-error')?.slice(3) || 'assistant';
+        entries.push({ kind: 'msg', role, text: el.textContent.trim() });
+      }
+    });
+    try { localStorage.setItem(CHAT_KEY, JSON.stringify(entries)); } catch {}
+  }
+
+  function restoreHistory() {
+    _savePaused = true;
+    try {
+      const saved = JSON.parse(localStorage.getItem(CHAT_KEY) || '[]');
+      for (const e of saved) {
+        if (e.kind === 'sep') addSeparator(e.text);
+        else addMessage(e.role, e.text || '');
+      }
+    } catch {} finally { _savePaused = false; }
+  }
+
+  function clearHistory() {
+    if (!confirm('Limpar todo o histórico do chat?')) return;
+    elMessages.innerHTML = '';
+    localStorage.removeItem(CHAT_KEY);
+  }
+
   // ── Messages ──────────────────────────────────────────────
+  function addDelBtn(el) {
+    const btn = document.createElement('button');
+    btn.className = 'ai-msg-del';
+    btn.setAttribute('aria-label', 'Delete');
+    btn.addEventListener('click', (e) => { e.stopPropagation(); el.remove(); saveHistory(); });
+    el.appendChild(btn);
+  }
+
   function addMessage(role, text) {
     const el = document.createElement('div');
     el.className = 'ai-msg ai-' + role;
     el.textContent = text;
+    addDelBtn(el);
     elMessages.appendChild(el);
     elMessages.scrollTop = elMessages.scrollHeight;
+    saveHistory();
     return el;
   }
 
@@ -184,8 +230,10 @@
     const el = document.createElement('div');
     el.className = 'ai-separator';
     el.textContent = text;
+    addDelBtn(el);
     elMessages.appendChild(el);
     elMessages.scrollTop = elMessages.scrollHeight;
+    saveHistory();
   }
 
   let _scrollRaf = null;
@@ -325,8 +373,12 @@
       if (err.name !== 'AbortError') {
         elReply.textContent = '⚠ ' + err.message;
         elReply.classList.add('ai-error');
+        addDelBtn(elReply);
       } else {
-        if (!elReply.textContent) elReply.textContent = '(stopped)';
+        if (!elReply.textContent) {
+          elReply.textContent = '(stopped)';
+          addDelBtn(elReply);
+        }
       }
     } finally {
       elReply.classList.remove('ai-streaming');
@@ -335,6 +387,7 @@
       elSend.textContent = '↑';
       elSend.title = 'Send';
       if (fullText) tryAddApplyBtn(elReply, fullText);
+      saveHistory();
     }
   }
 
@@ -392,6 +445,10 @@
   });
 
   renderTierBtn();
+  restoreHistory();
+
+  const elClearBtn = document.getElementById('ai-clear');
+  if (elClearBtn) elClearBtn.addEventListener('click', clearHistory);
 
   // ── Expose helpers for project_builder.js ─────────────────
   window.sane = window.sane || {};
