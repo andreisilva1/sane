@@ -9,7 +9,7 @@ Built-in AI. Zero cloud. Keyboard-first.
 
 [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows-0078D4?style=flat-square&logo=windows&logoColor=white)](https://github.com/andreisilva1/sane/releases/latest)
-[![Version](https://img.shields.io/badge/version-0.3.0-22863a?style=flat-square)](https://github.com/andreisilva1/sane/releases/latest)
+[![Version](https://img.shields.io/badge/version-0.3.1-22863a?style=flat-square)](https://github.com/andreisilva1/sane/releases/latest)
 
 [![Tauri](https://img.shields.io/badge/Tauri-24C8D8?style=flat-square&logo=tauri&logoColor=white)](https://tauri.app)
 [![Rust](https://img.shields.io/badge/Rust-000000?style=flat-square&logo=rust&logoColor=white)](https://www.rust-lang.org)
@@ -207,6 +207,10 @@ Performance depends on your hardware. A modern machine with 16 GB RAM handles th
 ---
 
 ## Changelog
+
+### 0.3.1
+- **Auto tree refresh** — file tree updates automatically every 3 seconds when files are added or removed; expanded folders are preserved across refreshes
+- **Project Builder persistence** — build plan and per-file progress are saved to `localStorage`; if the build is interrupted (reload, app close), a resume card appears on next launch with a **Continue** button that picks up exactly where it left off
 
 ### 0.3.0
 - **HTTP Client** — proxy any HTTP request through the backend, color-coded status, JSON pretty-print (`Ctrl+Shift+H`)

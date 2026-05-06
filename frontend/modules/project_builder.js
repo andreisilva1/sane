@@ -9,6 +9,35 @@
   let abortCtrl = null;
   let activeCard = null;
 
+  // ── Persistence (localStorage) ────────────────────────────
+  const PB_PLAN_KEY     = 'sane_pb_plan';
+  const PB_PROGRESS_KEY = 'sane_pb_progress';
+
+  function savePlanState(p, startIdx) {
+    localStorage.setItem(PB_PLAN_KEY, JSON.stringify(p));
+    localStorage.setItem(PB_PROGRESS_KEY, String(startIdx));
+  }
+
+  function saveProgress(idx) {
+    localStorage.setItem(PB_PROGRESS_KEY, String(idx));
+  }
+
+  function clearSavedBuild() {
+    localStorage.removeItem(PB_PLAN_KEY);
+    localStorage.removeItem(PB_PROGRESS_KEY);
+  }
+
+  function getSavedBuild() {
+    try {
+      const p   = JSON.parse(localStorage.getItem(PB_PLAN_KEY));
+      const idx = parseInt(localStorage.getItem(PB_PROGRESS_KEY) || '0', 10);
+      if (p && Array.isArray(p.steps) && p.steps.length > 0 && idx < p.steps.length) {
+        return { savedPlan: p, startIdx: idx };
+      }
+    } catch {}
+    return null;
+  }
+
   // ── AI stream ─────────────────────────────────────────────
   async function streamAsk(prompt) {
     const model = window.sane?.activeModel;
@@ -200,6 +229,8 @@
       if (!Array.isArray(plan.steps) || plan.steps.length === 0)
         throw new Error('Plan has no files. Try a more specific prompt.');
 
+      savePlanState(plan, 0);
+
       sysMsg.textContent = `✓ Plan ready — ${plan.steps.length} files`;
 
       const card = buildReviewCard(
@@ -226,14 +257,14 @@
   }
 
   // ── Phase 2: generate + write each file ──────────────────
-  async function executePlan() {
+  async function executePlan(startIdx = 0) {
     if (!plan?.steps?.length) return;
     if (activeCard) { disableCard(activeCard); activeCard = null; }
 
     window.sane.aiLockInput(true);
     const total = plan.steps.length;
 
-    for (let i = 0; i < total; i++) {
+    for (let i = startIdx; i < total; i++) {
       const step     = plan.steps[i];
       const filePath = state.folder.replace(/[/\\]$/, '') + '/' + step.file.replace(/\\/g, '/');
       const label    = `[${i + 1}/${total}] ${step.file}`;
@@ -251,6 +282,7 @@
           body:    JSON.stringify({ content }),
         });
         progressMsg.textContent = `✓ ${label}`;
+        saveProgress(i + 1);
       } catch (err) {
         if (err.name === 'AbortError') {
           progressMsg.textContent = `— cancelled —`;
@@ -265,6 +297,7 @@
       }
     }
 
+    clearSavedBuild();
     await window.sane.refreshTree?.();
 
     const folderName = state.folder.split(/[/\\]/).pop();
@@ -290,6 +323,50 @@
     setStatus('Project built', 'ok');
   }
 
+  // ── Resume card (shown on load if an incomplete build exists) ─
+  function buildResumeCard(savedPlan, startIdx) {
+    const remaining = savedPlan.steps.length - startIdx;
+    const card = document.createElement('div');
+    card.className = 'pb-resume-card';
+    card.innerHTML =
+      `<div class="pb-resume-title">↩ Unfinished build</div>` +
+      `<div class="pb-resume-summary">${escHtml(savedPlan.summary || '')}</div>` +
+      `<div class="pb-resume-progress">${startIdx} of ${savedPlan.steps.length} files done — ${remaining} remaining</div>` +
+      `<div class="pb-resume-foot">` +
+        `<button class="pb-resume-continue">▶ Continue</button>` +
+        `<button class="pb-resume-discard">✕ Discard</button>` +
+      `</div>`;
+
+    card.querySelector('.pb-resume-continue').addEventListener('click', () => {
+      if (!state.folder) {
+        addMsg('ai-pb-error', '⚠ Open the project folder first, then continue.');
+        return;
+      }
+      card.remove();
+      plan = savedPlan;
+      window.sane.aiOpenPanel?.();
+      executePlan(startIdx);
+    });
+
+    card.querySelector('.pb-resume-discard').addEventListener('click', () => {
+      clearSavedBuild();
+      card.remove();
+    });
+
+    return card;
+  }
+
+  function checkResumable() {
+    const saved = getSavedBuild();
+    if (!saved) return;
+    const { savedPlan, startIdx } = saved;
+    const card = buildResumeCard(savedPlan, startIdx);
+    const elMessages = document.getElementById('ai-messages');
+    if (elMessages) {
+      elMessages.appendChild(card);
+    }
+  }
+
   // ── Entry point ───────────────────────────────────────────
   window.sane = window.sane || {};
   window.sane.pbHandleSend = async function (text) {
@@ -300,5 +377,8 @@
     window.sane.aiLockInput(true);
     await generatePlan(text, '');
   };
+
+  // Check for a resumable build after the panel initialises
+  setTimeout(checkResumable, 0);
 
 })();

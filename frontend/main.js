@@ -12,6 +12,8 @@ const state = {
   dirty:    false,  // boolean
 };
 
+let _treeSnapshot = '';
+
 // ── DOM refs ──────────────────────────────────────────────
 const elBtnOpen    = document.getElementById('btn-open');
 const elBtnSave    = document.getElementById('btn-save');
@@ -67,6 +69,7 @@ async function loadFolder(dir) {
     const nodes = await res.json() || [];
     state.folder = dir;
     elFolderName.textContent = dir.split(/[/\\]/).pop();
+    _treeSnapshot = JSON.stringify(nodes);
     renderTree(nodes);
     setStatus('Folder loaded', 'ok');
     pushRecent(dir);
@@ -92,6 +95,25 @@ async function openFolder() {
 window.sane = window.sane || {};
 window.sane.loadFolder = loadFolder;
 window.sane.getRecent  = getRecent;
+
+// ── File tree helpers ─────────────────────────────────────
+function getExpandedPaths() {
+  const paths = new Set();
+  elTree.querySelectorAll('.tree-item.dir').forEach(row => {
+    const sibling = row.nextElementSibling;
+    if (sibling?.classList.contains('tree-children') && !sibling.classList.contains('hidden')) {
+      paths.add(row.dataset.path);
+    }
+  });
+  return paths;
+}
+
+function restoreExpandedPaths(paths) {
+  if (!paths.size) return;
+  elTree.querySelectorAll('.tree-item.dir').forEach(row => {
+    if (paths.has(row.dataset.path)) row.click();
+  });
+}
 
 // ── File tree ─────────────────────────────────────────────
 function renderTree(nodes) {
@@ -362,6 +384,7 @@ window.sane.refreshTree = async function () {
   try {
     const res   = await apiFetch('/files?path=' + encodeURIComponent(state.folder));
     const nodes = await res.json() || [];
+    _treeSnapshot = JSON.stringify(nodes);
     renderTree(nodes);
   } catch (err) {
     setStatus('Refresh failed: ' + err.message, 'err');
@@ -380,3 +403,18 @@ waitForBackend().then(() => {
     setStatus('Ready', 'ok');
   }
 });
+
+// ── Auto tree refresh (polls every 3s, skips during AI work) ──
+setInterval(async () => {
+  if (!state.folder || window.sane.isAIStreaming?.()) return;
+  try {
+    const res      = await apiFetch('/files?path=' + encodeURIComponent(state.folder));
+    const nodes    = await res.json() || [];
+    const snapshot = JSON.stringify(nodes);
+    if (snapshot === _treeSnapshot) return;
+    _treeSnapshot = snapshot;
+    const expanded = getExpandedPaths();
+    renderTree(nodes);
+    restoreExpandedPaths(expanded);
+  } catch {}
+}, 3000);
