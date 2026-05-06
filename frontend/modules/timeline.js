@@ -197,7 +197,9 @@
     setStatus('Tracing…', 'info');
 
     try {
-      const res  = await apiFetch('/trace?path=' + encodeURIComponent(filePath), { signal: traceAbort.signal });
+      const venv = window.sane.getSelectedVenv?.() || '';
+      const traceUrl = '/trace?path=' + encodeURIComponent(filePath) + (venv ? '&python=' + encodeURIComponent(venv) : '');
+      const res  = await apiFetch(traceUrl, { signal: traceAbort.signal });
       const data = await res.json();
 
       if (data.error) {

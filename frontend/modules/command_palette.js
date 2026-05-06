@@ -30,40 +30,78 @@
     else document.getElementById('term-input')?.focus();
   }
 
-  // ── Command registry ──────────────────────────────────────
-  const CMDS = [
-    { label: 'Open Folder',          icon: '⊕',  keys: '',             action: () => document.getElementById('btn-open').click() },
-    { label: 'Save File',            icon: '↓',  keys: 'Ctrl+S',       action: () => { if (!document.getElementById('btn-save').disabled) document.getElementById('btn-save').click(); } },
-    { label: 'Run File',             icon: '▶',  keys: 'Ctrl+Enter',   action: () => key('Enter', true) },
-    { label: 'Trace Execution',      icon: '⏱',  keys: '',             action: () => window.sane?.runTrace?.(state.filePath) },
-    { label: 'Preview HTML',         icon: '◧',  keys: 'Ctrl+Shift+V', action: () => key('V', true, true) },
-    { label: 'Toggle Sidebar',       icon: '⊟',  keys: 'Ctrl+B',       action: () => document.getElementById('btn-sidebar').click() },
-    { label: 'Toggle Terminal',      icon: '>_', keys: 'Ctrl+`',       action: () => key('`', true) },
-    { label: 'Toggle AI Panel',      icon: '✦',  keys: 'Ctrl+Shift+A', action: () => { window.sane?.aiOpenPanel?.() ?? key('A', true, true); } },
-    { label: 'Project Builder',      icon: '⬡',  keys: 'Ctrl+Shift+B', action: () => window.sane?.aiEnterPBMode?.() },
-    { label: 'Quick Open File',      icon: '⚡',  keys: 'Ctrl+P',       action: () => key('p', true) },
-    { label: 'Search in Files',      icon: '🔍', keys: 'Ctrl+Shift+F', action: () => key('F', true, true) },
-    { label: 'AI Refactor',          icon: '✦',  keys: 'Ctrl+Shift+I', action: () => key('I', true, true) },
-    { label: 'Extract Function',     icon: '⤴',  keys: 'Ctrl+Shift+E', action: () => key('E', true, true) },
-    { label: 'Inline Variable',      icon: '⤵',  keys: 'Ctrl+Shift+L', action: () => key('L', true, true) },
-    { label: 'Rename Symbol',        icon: '✎',  keys: 'F2',           action: () => key('F2') },
-    { label: 'Go to Definition',     icon: '→',  keys: 'F12',          action: () => key('F12') },
-    { label: 'Find References',      icon: '⇒',  keys: 'Shift+F12',    action: () => key('F12', false, true) },
-    { label: 'Project Context',      icon: '📌', keys: 'Ctrl+Shift+C', action: () => key('C', true, true) },
-    { label: 'Project Memory',       icon: '🗒', keys: 'Ctrl+Shift+M', action: () => key('M', true, true) },
-    { label: 'Change Theme',         icon: '🎨', keys: 'Ctrl+,',       action: () => key(',', true) },
-    { label: 'Keyboard Shortcuts',   icon: '?',  keys: '',             action: () => document.getElementById('btn-shortcuts').click() },
-    { label: 'Focus Editor',         icon: '✏',  keys: 'Ctrl+1',       action: () => document.getElementById('editor').focus() },
-    { label: 'Focus File Explorer',  icon: '📂', keys: 'Ctrl+2',       action: focusTree },
-    { label: 'Focus Terminal',       icon: '>_', keys: 'Ctrl+3',       action: focusTerminal },
-    { label: 'HTTP Client',          icon: '⇄',  keys: 'Ctrl+Shift+H', action: () => key('H', true, true) },
-    { label: '.env Manager',         icon: '⚙',  keys: 'Ctrl+Shift+N', action: () => key('N', true, true) },
-    { label: 'DB Viewer',            icon: '⊞',  keys: 'Ctrl+Shift+D', action: () => window.sane?.openDBViewer?.() },
-    { label: 'Activity Log',         icon: '📋', keys: 'Ctrl+Shift+J', action: () => key('J', true, true) },
-    { label: 'Dev Scheduler',        icon: '⏲',  keys: '',             action: () => window.sane?.openScheduler?.() },
-    { label: 'Git: Commit',          icon: '↑',  keys: 'Ctrl+Shift+G', action: () => window.sane?.gitOpenCommit?.() },
-    { label: 'Git: View Diff',       icon: '±',  keys: '',             action: () => { const p = state.filePath; if (p) window.sane?.gitShowDiff?.(p); } },
+  // ── Command registry (section → alphabetical) ────────────
+  const SECTIONS = [
+    {
+      name: 'File',
+      cmds: [
+        { label: 'Open Folder',         icon: '⊕',  keys: '',             action: () => document.getElementById('btn-open').click() },
+        { label: 'Quick Open File',     icon: '⚡',  keys: 'Ctrl+P',       action: () => key('p', true) },
+        { label: 'Save File',           icon: '↓',  keys: 'Ctrl+S',       action: () => { if (!document.getElementById('btn-save').disabled) document.getElementById('btn-save').click(); } },
+        { label: 'Search in Files',     icon: '🔍', keys: 'Ctrl+Shift+F', action: () => key('F', true, true) },
+      ],
+    },
+    {
+      name: 'Run',
+      cmds: [
+        { label: 'Preview HTML',        icon: '◧',  keys: 'Ctrl+Shift+V', action: () => key('V', true, true) },
+        { label: 'Run File',            icon: '▶',  keys: 'Ctrl+Enter',   action: () => key('Enter', true) },
+        { label: 'Trace Execution',     icon: '⏱',  keys: '',             action: () => window.sane?.runTrace?.(state.filePath) },
+      ],
+    },
+    {
+      name: 'Editor',
+      cmds: [
+        { label: 'Extract Function',    icon: '⤴',  keys: 'Ctrl+Shift+E', action: () => key('E', true, true) },
+        { label: 'Find References',     icon: '⇒',  keys: 'Shift+F12',    action: () => key('F12', false, true) },
+        { label: 'Go to Definition',    icon: '→',  keys: 'F12',          action: () => key('F12') },
+        { label: 'Inline Variable',     icon: '⤵',  keys: 'Ctrl+Shift+L', action: () => key('L', true, true) },
+        { label: 'Rename Symbol',       icon: '✎',  keys: 'F2',           action: () => key('F2') },
+      ],
+    },
+    {
+      name: 'AI',
+      cmds: [
+        { label: 'AI Refactor',         icon: '✦',  keys: 'Ctrl+Shift+I', action: () => key('I', true, true) },
+        { label: 'Project Builder',     icon: '⬡',  keys: 'Ctrl+Shift+B', action: () => window.sane?.aiEnterPBMode?.() },
+        { label: 'Project Context',     icon: '📌', keys: 'Ctrl+Shift+C', action: () => key('C', true, true) },
+        { label: 'Project Memory',      icon: '🗒', keys: 'Ctrl+Shift+M', action: () => key('M', true, true) },
+        { label: 'Toggle AI Panel',     icon: '✦',  keys: 'Ctrl+Shift+A', action: () => { window.sane?.aiOpenPanel?.() ?? key('A', true, true); } },
+      ],
+    },
+    {
+      name: 'Git',
+      cmds: [
+        { label: 'Git: Commit',         icon: '↑',  keys: 'Ctrl+Shift+G', action: () => window.sane?.gitOpenCommit?.() },
+        { label: 'Git: View Diff',      icon: '±',  keys: '',             action: () => { const p = state.filePath; if (p) window.sane?.gitShowDiff?.(p); } },
+      ],
+    },
+    {
+      name: 'Dev Toolkit',
+      cmds: [
+        { label: '.env Manager',        icon: '⚙',  keys: 'Ctrl+Shift+N', action: () => key('N', true, true) },
+        { label: 'Activity Log',        icon: '📋', keys: 'Ctrl+Shift+J', action: () => key('J', true, true) },
+        { label: 'DB Viewer',           icon: '⊞',  keys: 'Ctrl+Shift+D', action: () => window.sane?.openDBViewer?.() },
+        { label: 'Dev Scheduler',       icon: '⏲',  keys: '',             action: () => window.sane?.openScheduler?.() },
+        { label: 'HTTP Client',         icon: '⇄',  keys: 'Ctrl+Shift+H', action: () => key('H', true, true) },
+      ],
+    },
+    {
+      name: 'View',
+      cmds: [
+        { label: 'Change Theme',        icon: '🎨', keys: 'Ctrl+,',       action: () => key(',', true) },
+        { label: 'Focus Editor',        icon: '✏',  keys: 'Ctrl+1',       action: () => document.getElementById('editor').focus() },
+        { label: 'Focus File Explorer', icon: '📂', keys: 'Ctrl+2',       action: focusTree },
+        { label: 'Focus Terminal',      icon: '>_', keys: 'Ctrl+3',       action: focusTerminal },
+        { label: 'Keyboard Shortcuts',  icon: '?',  keys: '',             action: () => document.getElementById('btn-shortcuts').click() },
+        { label: 'Toggle Sidebar',      icon: '⊟',  keys: 'Ctrl+B',       action: () => document.getElementById('btn-sidebar').click() },
+        { label: 'Toggle Terminal',     icon: '>_', keys: 'Ctrl+`',       action: () => key('`', true) },
+      ],
+    },
   ];
+
+  // Flat list for filtered search
+  const CMDS = SECTIONS.flatMap(s => s.cmds);
 
   // ── Filter + render ───────────────────────────────────────
   function esc(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
@@ -82,25 +120,51 @@
 
   function getFiltered() {
     const q = elInput.value.trim().toLowerCase();
-    if (!q) return CMDS;
+    if (!q) return null; // null = use sectioned view
     return CMDS.filter(c => c.label.toLowerCase().includes(q));
   }
 
+  function makeItem(c, idx, list, q) {
+    const el = document.createElement('div');
+    el.className = 'cp-item' + (idx === 0 ? ' cp-selected' : '');
+    el.dataset.idx = idx;
+    el.innerHTML =
+      `<span class="cp-icon">${esc(c.icon)}</span>` +
+      `<span class="cp-label">${highlight(c.label, q)}</span>` +
+      (c.keys ? `<span class="cp-key">${esc(c.keys)}</span>` : '');
+    el.addEventListener('mousedown', e => { e.preventDefault(); pick(idx, list); });
+    el.addEventListener('mousemove', () => setSelected(idx));
+    return el;
+  }
+
   function render() {
+    const q    = elInput.value.trim();
     const list = getFiltered();
     elList.innerHTML = '';
-    list.forEach((c, i) => {
-      const el = document.createElement('div');
-      el.className = 'cp-item' + (i === 0 ? ' cp-selected' : '');
-      el.dataset.idx = i;
-      el.innerHTML =
-        `<span class="cp-icon">${esc(c.icon)}</span>` +
-        `<span class="cp-label">${highlight(c.label, elInput.value.trim())}</span>` +
-        (c.keys ? `<span class="cp-key">${esc(c.keys)}</span>` : '');
-      el.addEventListener('mousedown', e => { e.preventDefault(); pick(i, list); });
-      el.addEventListener('mousemove', () => setSelected(i));
-      elList.appendChild(el);
-    });
+
+    if (list) {
+      // Filtered flat view
+      list.forEach((c, i) => elList.appendChild(makeItem(c, i, list, q)));
+    } else {
+      // Sectioned view — build a flat ordered list for keyboard nav
+      const flat = [];
+      SECTIONS.forEach(sec => {
+        const hdr = document.createElement('div');
+        hdr.className = 'cp-section';
+        hdr.textContent = sec.name;
+        elList.appendChild(hdr);
+        sec.cmds.forEach(c => {
+          const idx = flat.length;
+          flat.push(c);
+          elList.appendChild(makeItem(c, idx, flat, ''));
+        });
+      });
+      // Patch: re-wire mousemove/mousedown with the complete flat array after building
+      elList.querySelectorAll('.cp-item').forEach((el, i) => {
+        el.onmousedown = e => { e.preventDefault(); pick(i, flat); };
+        el.onmousemove = () => setSelected(i);
+      });
+    }
     selected = 0;
   }
 
@@ -111,8 +175,12 @@
     items[idx]?.scrollIntoView({ block: 'nearest' });
   }
 
+  function currentList() {
+    return getFiltered() ?? SECTIONS.flatMap(s => s.cmds);
+  }
+
   function pick(idx, list) {
-    const cmd = list[idx];
+    const cmd = (list ?? currentList())[idx];
     if (!cmd) return;
     close();
     setTimeout(() => cmd.action(), 30);
@@ -153,22 +221,20 @@
 
     if (elOverlay.classList.contains('hidden')) return;
 
-    const list = getFiltered();
-    const count = list.length;
+    const count = currentList().length;
     if (e.key === 'Escape')    { e.preventDefault(); close(); }
     if (e.key === 'ArrowDown') { e.preventDefault(); setSelected(Math.min(selected + 1, count - 1)); }
     if (e.key === 'ArrowUp')   { e.preventDefault(); setSelected(Math.max(selected - 1, 0)); }
-    if (e.key === 'Enter')     { e.preventDefault(); pick(selected, list); }
+    if (e.key === 'Enter')     { e.preventDefault(); pick(selected, null); }
   });
 
   elInput.addEventListener('input', () => { render(); selected = 0; });
 
   elInput.addEventListener('keydown', e => {
-    const list  = getFiltered();
-    const count = list.length;
+    const count = currentList().length;
     if (e.key === 'ArrowDown') { e.preventDefault(); setSelected(Math.min(selected + 1, count - 1)); }
     if (e.key === 'ArrowUp')   { e.preventDefault(); setSelected(Math.max(selected - 1, 0)); }
-    if (e.key === 'Enter')     { e.preventDefault(); pick(selected, list); }
+    if (e.key === 'Enter')     { e.preventDefault(); pick(selected, null); }
     if (e.key === 'Escape')    { e.preventDefault(); close(); }
   });
   elOverlay.addEventListener('mousedown', e => { if (e.target === elOverlay) close(); });

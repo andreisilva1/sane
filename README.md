@@ -37,6 +37,13 @@ Detects common runtime errors and suggests or applies fixes automatically — no
 
 ---
 
+### AI Chat
+Ask the AI to convert, refactor, or explain code. The same chat works across files and languages.
+
+<img src="gifs/ai_integration.gif" alt="AI chat — converting Python to Java" width="100%" />
+
+---
+
 ## Why this exists
 
 Most editors have become sprawling platforms. AI integrations usually mean cloud APIs, accounts, and data leaving your machine. Setup friction is high, and the tools often get in the way of the actual work.
@@ -57,7 +64,7 @@ Sane is the opposite: a focused editor that runs your code, understands it, and 
 
 ### Execution
 - Run Python, JavaScript, Go, and Java with a single keystroke (`Ctrl+Enter`)
-- Zero configuration — Python virtualenvs detected automatically, others use system PATH
+- Zero configuration — Python virtualenvs detected and selectable automatically, others use system PATH
 - Java uses single-file execution mode (Java 11+) — no manual `javac` step
 - Integrated terminal with multiple sessions
 - **Execution Timeline** — step through Python code line by line, inspect variable state at each step
@@ -117,8 +124,8 @@ Sane is the opposite: a focused editor that runs your code, understands it, and 
 
 <div align="center">
 
-[![Download Installer](https://img.shields.io/badge/Download%20Installer-.exe-0078D4?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/andreisilva1/sane/releases/latest/download/Sane_0.3.0_x64-setup.exe)
-[![Download MSI](https://img.shields.io/badge/Download%20MSI-.msi-6E40C9?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/andreisilva1/sane/releases/latest/download/Sane_0.3.0_x64_en-US.msi)
+[![Download Installer](https://img.shields.io/badge/Download%20Installer-.exe-0078D4?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/andreisilva1/sane/releases/latest/download/Sane_0.4.0_x64-setup.exe)
+[![Download MSI](https://img.shields.io/badge/Download%20MSI-.msi-6E40C9?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/andreisilva1/sane/releases/latest/download/Sane_0.4.0_x64_en-US.msi)
 
 </div>
 
@@ -205,7 +212,7 @@ Full reference: [snippets.md](snippets.md)
 
 | Language | Run | Trace | Highlight | Autocomplete | Notes |
 |---|---|---|---|---|---|
-| Python | ✓ | ✓ | ✓ | ✓ | Virtualenv auto-detection |
+| Python | ✓ | ✓ | ✓ | ✓ | Virtualenv auto-detection and selection |
 | JavaScript | ✓ | — | ✓ | ✓ | Requires Node.js |
 | Go | ✓ | — | ✓ | ✓ | Requires Go toolchain |
 | Java | ✓ | — | ✓ | ✓ | Java 11+, single-file mode |
@@ -233,6 +240,8 @@ Performance depends on your hardware. A modern machine with 16 GB RAM handles th
 
 ### 0.4.0
 - **Git integration** — minimal, invisible Git support: file status badges (M/A/U) in the file tree update automatically; right-click any file → View Diff for a color-coded diff overlay; `Ctrl+Shift+G` opens a commit modal that stages and commits all changes in one step; hidden automatically for non-Git projects
+- **Project Builder run commands** — after a build completes, the AI suggests the exact commands to run the project
+- **Venv selector** — Python virtualenvs are detected and listed in the output panel; click to switch, persisted per project
 - **Activity Log** shortcut moved to `Ctrl+Shift+J` (freed `G` for Git)
 
 ### 0.3.3
@@ -286,9 +295,9 @@ If you read the source and see something worth improving, a PR is welcome.
 
 - [x] Go and Java language support
 - [x] Project-wide AI context
+- [x] Git integration — file status in tree, quick diff, simple commit flow
 - [ ] macOS and Linux builds
 - [ ] TypeScript, PHP, and Ruby language support
-- [x] Git integration — file status in tree, quick diff, simple commit flow
 - [ ] Editor enhancements — multi-cursor, split view, minimap, custom snippets, find & replace with regex
 
 ---

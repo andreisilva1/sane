@@ -61,6 +61,7 @@
   // ── State ─────────────────────────────────────────────────
   let installedModels  = new Set();
   let pullTimers       = {};
+  let downloadingTiers = new Set(); // tiers with an active pull in progress
   let activeTierId     = loadActive();
   let ollamaState      = 'unknown'; // not_installed | not_running | running
   let ollamaInstalling = false;
@@ -102,12 +103,9 @@
     elOllamaWarn.classList.remove('ais-ok');
 
     if (state !== 'not_installed') {
-      // Ollama is present on this machine
       elOllamaWarn.classList.add('ais-ok');
       elOllamaWarn.innerHTML =
-        `<span class="ais-warn-text ais-warn-ok">Ollama detected — download a model below to get started.</span>` +
-        `<button class="ais-install-btn ais-btn-ghost" id="ais-reinstall-btn">Reinstall Ollama</button>`;
-      document.getElementById('ais-reinstall-btn')?.addEventListener('click', () => startOllamaInstall(true));
+        `<span class="ais-warn-text ais-warn-ok">Ollama detected — download a model below to get started.</span>`;
       elOllamaWarn.classList.remove('hidden');
       return;
     }
@@ -232,6 +230,19 @@
       } catch {
         installedModels = new Set();
       }
+
+      // Re-attach polling for any downloads that were in progress when the panel was closed
+      for (const tier of TIERS) {
+        if (pullTimers[tier.id]) continue; // already polling
+        try {
+          const res = await apiFetch('/ai/pull/status?name=' + encodeURIComponent(tier.model));
+          const st  = await res.json();
+          if (st.status && !st.done && !st.error) {
+            downloadingTiers.add(tier.id);
+            startPollTimer(tier);
+          }
+        } catch {}
+      }
     } else {
       installedModels = new Set();
     }
@@ -302,6 +313,10 @@
     if (isInstalled) {
       return `<button class="ais-btn ais-btn-activate" data-action="activate">Activate AI</button>${delBtn}`;
     }
+    if (downloadingTiers.has(tier.id)) {
+      return `<button class="ais-btn ais-btn-download" disabled>Downloading…</button>` +
+             `<button class="ais-btn ais-btn-cancel-dl" data-action="cancel-dl">Cancel</button>`;
+    }
     if (blocked) {
       const tip = ollamaInstalling
         ? 'Ollama is being installed, please wait…'
@@ -312,9 +327,10 @@
   }
 
   function wireCard(card, tier, isInstalled, isActive, blocked) {
-    card.querySelector('[data-action="download"]')?.addEventListener('click', () => startDownload(tier));
-    card.querySelector('[data-action="activate"]')?.addEventListener('click', () => activate(tier));
-    card.querySelector('[data-action="delete"]')?.addEventListener('click',   () => confirmDelete(card, tier));
+    card.querySelector('[data-action="download"]')?.addEventListener('click',    () => startDownload(tier));
+    card.querySelector('[data-action="activate"]')?.addEventListener('click',    () => activate(tier));
+    card.querySelector('[data-action="delete"]')?.addEventListener('click',      () => confirmDelete(card, tier));
+    card.querySelector('[data-action="cancel-dl"]')?.addEventListener('click',   () => cancelDownload(tier));
   }
 
   // ── Download ──────────────────────────────────────────────
@@ -338,30 +354,24 @@
     doModelDownload(tier);
   }
 
-  function doModelDownload(tier) {
-    const progEl  = document.getElementById('ais-prog-' + tier.id);
-    const fillEl  = document.getElementById('ais-fill-' + tier.id);
-    const labelEl = document.getElementById('ais-plabel-' + tier.id);
-    const card    = document.querySelector(`.ais-card[data-tier="${tier.id}"]`);
-    const btn     = card?.querySelector('[data-action="download"]');
-
-    if (btn) { btn.textContent = 'Downloading…'; btn.disabled = true; }
-    progEl?.classList.remove('hidden');
-
-    apiFetch('/ai/pull', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ Name: tier.model }),
-    }).catch(err => {
-      if (labelEl) labelEl.textContent = 'Error: ' + err.message;
-    });
-
+  // Polls /ai/pull/status and updates progress UI using fresh DOM lookups each tick.
+  // Safe to call after renderCards() rebuilds the DOM.
+  function startPollTimer(tier) {
     clearInterval(pullTimers[tier.id]);
     pullTimers[tier.id] = setInterval(async () => {
+      if (!downloadingTiers.has(tier.id)) {
+        clearInterval(pullTimers[tier.id]);
+        delete pullTimers[tier.id];
+        return;
+      }
+      const progEl  = document.getElementById('ais-prog-'   + tier.id);
+      const fillEl  = document.getElementById('ais-fill-'   + tier.id);
+      const labelEl = document.getElementById('ais-plabel-' + tier.id);
       try {
         const res = await apiFetch('/ai/pull/status?name=' + encodeURIComponent(tier.model));
         const st  = await res.json();
 
+        if (progEl) progEl.classList.remove('hidden');
         if (st.total > 0) {
           const pct = Math.round((st.completed / st.total) * 100);
           if (fillEl)  fillEl.style.width = pct + '%';
@@ -372,18 +382,40 @@
 
         if (st.done) {
           clearInterval(pullTimers[tier.id]);
+          delete pullTimers[tier.id];
+          downloadingTiers.delete(tier.id);
           if (st.error) {
             if (labelEl) labelEl.textContent = 'Error: ' + st.error;
-            if (btn) { btn.textContent = 'Retry'; btn.disabled = false; }
+            renderCards();
           } else {
             installedModels.add(tier.model);
             if (fillEl)  fillEl.style.width = '100%';
             if (labelEl) labelEl.textContent = 'Download complete!';
-            setTimeout(() => { progEl?.classList.add('hidden'); renderCards(); }, 1200);
+            setTimeout(() => renderCards(), 1200);
           }
         }
       } catch {}
     }, 600);
+  }
+
+  function doModelDownload(tier) {
+    downloadingTiers.add(tier.id);
+    renderCards(); // immediately show Downloading… button + progress bar
+
+    apiFetch('/ai/pull', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ Name: tier.model }),
+    }).catch(() => {});
+
+    startPollTimer(tier);
+  }
+
+  function cancelDownload(tier) {
+    clearInterval(pullTimers[tier.id]);
+    delete pullTimers[tier.id];
+    downloadingTiers.delete(tier.id);
+    renderCards();
   }
 
   // ── Delete model ──────────────────────────────────────────

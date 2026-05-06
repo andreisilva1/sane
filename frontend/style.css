@@ -835,6 +835,17 @@ kbd {
   font-weight: 600;
 }
 
+.cp-section {
+  padding: 8px 14px 3px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  pointer-events: none;
+  user-select: none;
+}
+
 /* ── Tree item focus ─────────────────────────────────────── */
 .tree-item:focus,
 .tree-item:focus-visible {
@@ -1385,8 +1396,40 @@ kbd {
 #btn-trace:hover { background: rgba(229,192,123,0.12); border-color: #e5c07b; }
 #btn-trace.tl-btn-active { background: rgba(229,192,123,0.15); border-color: #e5c07b; color: #e5c07b; }
 
-#output-venv   { font-size: 11px; color: var(--text-muted); }
+#output-venv    { font-size: 11px; color: var(--text-muted); }
 #output-elapsed { font-size: 11px; color: var(--text-muted); margin-left: auto; }
+
+#venv-btn {
+  font-size: 11px;
+  padding: 2px 7px;
+  background: var(--bg3);
+  border: 1px solid var(--border2);
+  color: var(--text-dim);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  letter-spacing: 0.01em;
+}
+#venv-btn:hover { color: var(--accent); border-color: var(--accent); }
+
+#venv-picker {
+  position: fixed;
+  z-index: 900;
+  background: var(--bg3);
+  border: 1px solid var(--border2);
+  border-radius: 5px;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.5);
+  min-width: 120px;
+  padding: 4px 0;
+  font-family: var(--font-ui);
+  font-size: 12px;
+}
+.venv-option {
+  padding: 6px 12px;
+  cursor: pointer;
+  color: var(--text-dim);
+}
+.venv-option:hover { background: var(--accent-bg); color: var(--accent); }
+.venv-option.venv-active { color: var(--accent); }
 
 #output-body {
   flex: 1;
@@ -2753,6 +2796,18 @@ kbd {
   padding: 4px 10px;
 }
 .ais-btn-delete:hover {
+  color: #e06c75;
+  border-color: rgba(224,108,117,0.35);
+  background: rgba(224,108,117,0.08);
+}
+.ais-btn-cancel-dl {
+  margin-left: 6px;
+  color: var(--text-muted);
+  border-color: var(--border);
+  font-size: 11px;
+  padding: 4px 10px;
+}
+.ais-btn-cancel-dl:hover {
   color: #e06c75;
   border-color: rgba(224,108,117,0.35);
   background: rgba(224,108,117,0.08);
