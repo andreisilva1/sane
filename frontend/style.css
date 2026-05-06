@@ -1388,6 +1388,33 @@ kbd {
 #output-venv   { font-size: 11px; color: var(--text-muted); }
 #output-elapsed { font-size: 11px; color: var(--text-muted); margin-left: auto; }
 
+#output-venv.venv-btn {
+  cursor: pointer;
+  color: var(--text-dim);
+  border-bottom: 1px dotted var(--border3);
+}
+#output-venv.venv-btn:hover { color: var(--accent); }
+
+#venv-picker {
+  position: fixed;
+  z-index: 900;
+  background: var(--bg3);
+  border: 1px solid var(--border2);
+  border-radius: 5px;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.5);
+  min-width: 120px;
+  padding: 4px 0;
+  font-family: var(--font-ui);
+  font-size: 12px;
+}
+.venv-option {
+  padding: 6px 12px;
+  cursor: pointer;
+  color: var(--text-dim);
+}
+.venv-option:hover { background: var(--accent-bg); color: var(--accent); }
+.venv-option.venv-active { color: var(--accent); }
+
 #output-body {
   flex: 1;
   overflow-y: auto;

@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 )
 
@@ -29,6 +30,54 @@ func findVenv(projectDir string) (python, label string) {
 	return "python", "global"
 }
 
+// venvLabel derives a short display name from an interpreter path.
+func venvLabel(python string) string {
+	parts := strings.Split(filepath.ToSlash(python), "/")
+	for i, p := range parts {
+		if (p == "Scripts" || p == "bin") && i > 0 {
+			return parts[i-1]
+		}
+	}
+	return "venv"
+}
+
+// VenvOption describes one available Python environment.
+type VenvOption struct {
+	Name   string `json:"name"`
+	Python string `json:"python"`
+}
+
+// listVenvs scans projectDir for all venv-like directories and returns
+// them together with a "global" fallback entry.
+func listVenvs(projectDir string) []VenvOption {
+	candidates := []string{"venv", ".venv", "env", "virtualenv", ".virtualenv"}
+	var opts []VenvOption
+	for _, name := range candidates {
+		var interp string
+		if runtime.GOOS == "windows" {
+			interp = filepath.Join(projectDir, name, "Scripts", "python.exe")
+		} else {
+			interp = filepath.Join(projectDir, name, "bin", "python")
+		}
+		if _, err := os.Stat(interp); err == nil {
+			opts = append(opts, VenvOption{Name: name, Python: interp})
+		}
+	}
+	opts = append(opts, VenvOption{Name: "global", Python: "python"})
+	return opts
+}
+
+// GET /pyenv/list?root=  →  [{name, python}]
+func serveListVenvs(w http.ResponseWriter, r *http.Request) {
+	root := r.URL.Query().Get("root")
+	if root == "" {
+		http.Error(w, "root required", http.StatusBadRequest)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(listVenvs(root))
+}
+
 func servePyEnv(w http.ResponseWriter, r *http.Request) {
 	root := r.URL.Query().Get("root")
 	if root == "" {
@@ -45,7 +94,13 @@ func buildPythonCmd(_ context.Context, body runBody, _ func(kind, text string)) 
 	if projectDir == "" {
 		projectDir = filepath.Dir(body.Path)
 	}
-	python, label := findVenv(projectDir)
+	var python, label string
+	if body.Venv != "" {
+		python = body.Venv
+		label = venvLabel(body.Venv)
+	} else {
+		python, label = findVenv(projectDir)
+	}
 	// -u: unbuffered stdout/stderr so input() prompts arrive immediately.
 	// Plain exec.Command (not CommandContext) so the process is NOT killed by an
 	// HTTP context cancellation mid-run. streamRunCmd handles termination instead.
@@ -132,7 +187,13 @@ func serveTrace(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
 	defer cancel()
 
-	python, _ := findVenv(filepath.Dir(filePath))
+	pythonOverride := r.URL.Query().Get("python")
+	var python string
+	if pythonOverride != "" {
+		python = pythonOverride
+	} else {
+		python, _ = findVenv(filepath.Dir(filePath))
+	}
 	cmd := noConsole(exec.CommandContext(ctx, python, "-u", tmp.Name(), filePath))
 	cmd.Dir = filepath.Dir(filePath)
 	cmd.Env = append(os.Environ(), "PYTHONUTF8=1", "PYTHONIOENCODING=utf-8")

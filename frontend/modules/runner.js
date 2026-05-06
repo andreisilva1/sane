@@ -12,6 +12,88 @@
   let runTimer   = null;
   let runSessId  = null;
 
+  // ── Venv selector ─────────────────────────────────────────
+  const VENV_KEY = () => 'sane_venv_' + (state.folder || '');
+  let venvOptions  = [];   // [{name, python}]
+  let selectedVenv = '';   // python path; '' = auto
+
+  function venvLabel(python) {
+    if (!python) return '';
+    const parts = python.replace(/\\/g, '/').split('/');
+    const si = parts.findIndex(p => p === 'Scripts' || p === 'bin');
+    return si > 0 ? parts[si - 1] : 'venv';
+  }
+
+  function renderVenvBtn() {
+    const isPy = state.filePath?.endsWith('.py');
+    if (!isPy || venvOptions.length <= 1) {
+      elVenv.textContent = '';
+      elVenv.classList.remove('venv-btn');
+      return;
+    }
+    const label = selectedVenv ? venvLabel(selectedVenv) : (venvOptions[0]?.name || 'auto');
+    elVenv.textContent = label;
+    elVenv.classList.add('venv-btn');
+  }
+
+  async function loadVenvs() {
+    if (!state.folder) return;
+    try {
+      const res = await apiFetch('/pyenv/list?root=' + encodeURIComponent(state.folder));
+      venvOptions = await res.json();
+      selectedVenv = localStorage.getItem(VENV_KEY()) || '';
+      // Validate stored path still exists in the list
+      if (selectedVenv && !venvOptions.find(v => v.python === selectedVenv)) {
+        selectedVenv = '';
+        localStorage.removeItem(VENV_KEY());
+      }
+      renderVenvBtn();
+    } catch {}
+  }
+
+  // ── Venv picker dropdown ──────────────────────────────────
+  const picker = document.createElement('div');
+  picker.id = 'venv-picker';
+  picker.className = 'hidden';
+  document.body.appendChild(picker);
+
+  function openPicker() {
+    picker.innerHTML = venvOptions.map(v => {
+      const active = (selectedVenv === v.python) || (!selectedVenv && v === venvOptions[0]);
+      return `<div class="venv-option${active ? ' venv-active' : ''}" data-python="${v.python}">${v.name}</div>`;
+    }).join('');
+
+    const rect = elVenv.getBoundingClientRect();
+    picker.style.left = rect.left + 'px';
+    picker.style.top  = (rect.bottom + 4) + 'px';
+    picker.classList.remove('hidden');
+
+    picker.querySelectorAll('.venv-option').forEach(el => {
+      el.addEventListener('click', () => {
+        const python = el.dataset.python;
+        // "global" has python="python" — treat as auto when it's the last/only option
+        const isDefault = venvOptions.indexOf(venvOptions.find(v => v.python === python)) === 0 && venvOptions.length === 1;
+        selectedVenv = (python === 'python' && venvOptions.findIndex(v => v.python === python) === venvOptions.length - 1 && venvOptions.length > 1)
+          ? '' : python;
+        if (selectedVenv) localStorage.setItem(VENV_KEY(), selectedVenv);
+        else localStorage.removeItem(VENV_KEY());
+        renderVenvBtn();
+        picker.classList.add('hidden');
+      });
+    });
+  }
+
+  elVenv.addEventListener('click', () => {
+    if (!elVenv.classList.contains('venv-btn')) return;
+    picker.classList.contains('hidden') ? openPicker() : picker.classList.add('hidden');
+  });
+
+  document.addEventListener('click', (e) => {
+    if (!picker.classList.contains('hidden') && !picker.contains(e.target) && e.target !== elVenv) {
+      picker.classList.add('hidden');
+    }
+  });
+
   // ── Show/hide Run / Trace buttons based on language registry ─
   function extOf(path) {
     if (!path) return '';
@@ -24,6 +106,8 @@
     const lang = window.sane.langs?.[extOf(path)];
     elBtnRun.classList.toggle('hidden',   !lang?.canRun);
     elBtnTrace.classList.toggle('hidden', !lang?.canTrace);
+    if (path?.endsWith('.py')) loadVenvs();
+    else { venvOptions = []; selectedVenv = ''; renderVenvBtn(); }
   }
 
   // ── Run ──────────────────────────────────────────────────
@@ -64,7 +148,7 @@
       const res = await fetch(API + '/run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ Path: state.filePath, Root: state.folder || '', ID: runSessId }),
+        body: JSON.stringify({ Path: state.filePath, Root: state.folder || '', ID: runSessId, ...(selectedVenv ? { Venv: selectedVenv } : {}) }),
         signal: runAbort.signal,
       });
 
@@ -207,6 +291,11 @@
   });
 
   // ── Register hook ─────────────────────────────────────────
+  document.addEventListener('sane:folder-loaded', () => {
+    venvOptions = []; selectedVenv = ''; renderVenvBtn();
+  });
+
   window.sane = window.sane || {};
   window.sane.onFileOpen = onFileOpen;
+  window.sane.getSelectedVenv = () => selectedVenv;
 })();

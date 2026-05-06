@@ -18,6 +18,7 @@ type runBody struct {
 	Path string
 	Root string
 	ID   string
+	Venv string // optional python interpreter path selected by the user
 }
 
 // LangRunner builds the command for running a source file.

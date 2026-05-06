@@ -44,6 +44,7 @@ func main() {
 	http.HandleFunc("/run/stop",    withCORS(serveRunStop))
 	http.HandleFunc("/trace",       withCORS(serveTrace))
 	http.HandleFunc("/pyenv",       withCORS(servePyEnv))
+	http.HandleFunc("/pyenv/list",  withCORS(serveListVenvs))
 	http.HandleFunc("/shell",       withCORS(serveShell))
 	http.HandleFunc("/shell/stdin", withCORS(serveShellStdin))
 
