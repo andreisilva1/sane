@@ -54,8 +54,7 @@ func main() {
 	http.HandleFunc("/env/write",        withCORS(serveEnvWrite))
 	http.HandleFunc("/env/activate",     withCORS(serveEnvActivate))
 	http.HandleFunc("/env/detect",       withCORS(serveEnvDetect))
-	http.HandleFunc("/port/owner",       withCORS(servePortOwner))
-	http.HandleFunc("/port/kill",        withCORS(servePortKill))
+
 	http.HandleFunc("/schedule/list",    withCORS(serveScheduleList))
 	http.HandleFunc("/schedule/add",     withCORS(serveScheduleAdd))
 	http.HandleFunc("/schedule/toggle",  withCORS(serveScheduleToggle))

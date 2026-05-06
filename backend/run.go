@@ -190,6 +190,7 @@ func serveRun(w http.ResponseWriter, r *http.Request) {
 		if envVars := GetActiveEnv(); len(envVars) > 0 {
 			cmd.Env = append(cmd.Env, envVars...)
 		}
+
 	}
 	writeEvent(map[string]any{"type": "info", "venv": label})
 	if err != nil || cmd == nil {

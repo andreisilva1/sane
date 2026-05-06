@@ -30,7 +30,6 @@
 | `Ctrl+Shift+J` | Activity Log |
 | `Alt+Shift+F` | Format JSON (when a `.json` file is open) |
 | Command Palette | Git: View Diff (current file) |
-| Command Palette | Port Manager (triggered automatically on port conflict, or open via palette) |
 | Command Palette | Dev Scheduler (open via command palette) |
 
 ## Editor

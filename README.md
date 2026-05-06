@@ -21,6 +21,22 @@ Built-in AI. Zero cloud. Keyboard-first.
 
 ---
 
+## In action
+
+### Project Builder
+Generate a full multi-file project from a single description — with per-file progress, a run commands card, and resume support if interrupted.
+
+<img src="gifs/project_builder.gif" alt="Project Builder" width="100%" />
+
+---
+
+### Self-Healing
+Detects common runtime errors and suggests or applies fixes automatically — no manual debugging needed.
+
+<img src="gifs/auto_fix.gif" alt="Self-Healing" width="100%" />
+
+---
+
 ## Why this exists
 
 Most editors have become sprawling platforms. AI integrations usually mean cloud APIs, accounts, and data leaving your machine. Setup friction is high, and the tools often get in the way of the actual work.
@@ -63,7 +79,6 @@ Sane is the opposite: a focused editor that runs your code, understands it, and 
 - **.env Manager** — browse, edit, and activate `.env` files; sensitive values masked by default; detects vars referenced in open file (`Ctrl+Shift+N`)
 - **DB Viewer** — browse SQLite databases: table list, paginated rows, ad-hoc query runner (`Ctrl+Shift+D`)
 - **Dev Scheduler** — run shell commands on a recurring interval while Sane is open; persists job definitions across restarts
-- **Port Manager** — detects `EADDRINUSE` on run failure, identifies the owning process, and offers a one-click kill
 - **JSON Viewer** — live validation badge, Format button, and recursive tree view for `.json` files (`Alt+Shift+F`)
 - **Activity Log** — rolling log of all toolkit actions, grouped by day, persisted in `localStorage` (`Ctrl+Shift+J`)
 
@@ -239,7 +254,6 @@ Performance depends on your hardware. A modern machine with 16 GB RAM handles th
 - **.env Manager** — list/edit/activate `.env` files, sensitive key masking, missing var detection, active env injected into every run (`Ctrl+Shift+N`)
 - **DB Viewer** — browse SQLite tables with pagination and ad-hoc query runner; pure-Go driver, no extra tools required (`Ctrl+Shift+D`)
 - **Dev Scheduler** — schedule shell commands to run on an interval while Sane is open; job definitions saved to `.sane-jobs.json`
-- **Port Manager** — detects port conflicts on run failure, identifies the owning process, and offers a one-click kill
 - **JSON Viewer** — live validation status, Format button (`Alt+Shift+F`), and recursive collapsible tree view for `.json` files
 - **Activity Log** — rolling 300-entry log of all toolkit and AI actions, grouped by day, persisted in `localStorage` (`Ctrl+Shift+J`)
 - **AI Feature Settings** — toggle Run Insight, Self-Healing, and Intent Detection independently via the `⚙` button in the AI panel
