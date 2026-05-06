@@ -70,6 +70,7 @@ func main() {
 	http.HandleFunc("/preview-dir/", withCORS(servePreviewDir))
 
 	// ── AI / Ollama ───────────────────────────────────────────
+	http.HandleFunc("/ai/project-context",        withCORS(serveAIProjectContext))
 	http.HandleFunc("/ai/ask",                   withCORS(serveAIAsk))
 	http.HandleFunc("/ai/check",                 withCORS(serveAICheck))
 	http.HandleFunc("/ai/models",                withCORS(serveAIModels))

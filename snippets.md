@@ -4,7 +4,8 @@
 
 | Shortcut | Action |
 |---|---|
-| `Ctrl+P` | Quick Open / Command Palette (prefix `>` for commands) |
+| `Ctrl+P` | Quick Open (jump to any file) |
+| `Ctrl+Shift+P` | Command Palette (prefix `>` to run commands) |
 | `Ctrl+S` | Save current file |
 | `Ctrl+B` | Toggle sidebar |
 | `Ctrl+Enter` | Run current file (Python / JS / Go / Java) |
@@ -22,9 +23,11 @@
 | **Dev Toolkit** | |
 | `Ctrl+Shift+H` | HTTP Client |
 | `Ctrl+Shift+N` | .env Manager |
-| `Ctrl+Shift+D` | DB Viewer |
+| `Ctrl+Shift+D` | DB Viewer (auto-opens when clicking a `.db` / `.sqlite` file) |
 | `Ctrl+Shift+G` | Activity Log |
-| `Alt+Shift+F` | Format JSON (when a .json file is open) |
+| `Alt+Shift+F` | Format JSON (when a `.json` file is open) |
+| Command Palette | Port Manager (triggered automatically on port conflict, or open via palette) |
+| Command Palette | Dev Scheduler (open via command palette) |
 
 ## Editor
 
@@ -74,7 +77,7 @@
 | Remove Dead Code | — | Remove assigned variables that are never used (Python only) |
 | AI Refactor | `Ctrl+Shift+I` | Two-pass AI refactoring with diff preview and approval step (Python + model required) |
 
-## Quick Open (Ctrl+P)
+## Quick Open (Ctrl+P) / Command Palette (Ctrl+Shift+P)
 
 | Shortcut | Action |
 |---|---|

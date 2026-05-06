@@ -9,7 +9,7 @@ Built-in AI. Zero cloud. Keyboard-first.
 
 [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows-0078D4?style=flat-square&logo=windows&logoColor=white)](https://github.com/andreisilva1/sane/releases/latest)
-[![Version](https://img.shields.io/badge/version-0.3.1-22863a?style=flat-square)](https://github.com/andreisilva1/sane/releases/latest)
+[![Version](https://img.shields.io/badge/version-0.3.3-22863a?style=flat-square)](https://github.com/andreisilva1/sane/releases/latest)
 
 [![Tauri](https://img.shields.io/badge/Tauri-24C8D8?style=flat-square&logo=tauri&logoColor=white)](https://tauri.app)
 [![Rust](https://img.shields.io/badge/Rust-000000?style=flat-square&logo=rust&logoColor=white)](https://www.rust-lang.org)
@@ -49,8 +49,9 @@ Sane is the opposite: a focused editor that runs your code, understands it, and 
 
 ### Built-in AI (fully local)
 - Powered by Ollama — installed automatically, no accounts, no API keys
-- AI chat panel with streaming responses
-- **Project Builder** — describe a project, generate real multi-file scaffolding
+- AI chat panel with streaming responses and persistent chat history
+- **Project-aware AI** — every message automatically includes your project's file tree and key file contents (`go.mod`, `package.json`, `README`, entry points, configs); the model uses what's relevant and ignores the rest
+- **Project Builder** — describe a project, generate real multi-file scaffolding with per-file progress, resume from interruption
 - AI Refactor with diff preview and approval step
 - **Self-Healing** — detects common runtime errors, suggests or applies fixes automatically
 - **Intent Detection** — reads your code and surfaces relevant actions contextually
@@ -208,6 +209,16 @@ Performance depends on your hardware. A modern machine with 16 GB RAM handles th
 
 ## Changelog
 
+### 0.3.3
+- **Project-aware AI** — every chat message automatically receives the project's file tree and contents of key files as context; no toggle needed — the model decides what's relevant
+- **Chat history persistence** — messages are saved to `localStorage` and restored on reload; cleared only via the new ⌫ button (with confirmation)
+- **Per-message delete** — × button on hover to remove individual messages or separators
+- **Project Builder — Reject plan** — new ✕ Reject button on the review card to cancel a generated plan entirely
+- **Project Builder — Resume card** stays visible after a choice: green when continued, red when discarded
+
+### 0.3.2
+- Chat history and per-message delete (superseded by 0.3.3 entry above)
+
 ### 0.3.1
 - **Auto tree refresh** — file tree updates automatically every 3 seconds when files are added or removed; expanded folders are preserved across refreshes
 - **Project Builder persistence** — build plan and per-file progress are saved to `localStorage`; if the build is interrupted (reload, app close), a resume card appears on next launch with a **Continue** button that picks up exactly where it left off
@@ -249,12 +260,11 @@ If you read the source and see something worth improving, a PR is welcome.
 ## Roadmap
 
 - [x] Go and Java language support
+- [x] Project-wide AI context
 - [ ] macOS and Linux builds
-- [ ] TypeScript and Rust language support
-- [ ] Project-wide AI context
-- [ ] Performance improvements for large files
-- [ ] Plugin system
-- [ ] Improved Project Builder with dependency resolution
+- [ ] TypeScript, PHP, and Ruby language support
+- [ ] Git integration — file status in tree, quick diff, simple commit flow
+- [ ] Editor enhancements — multi-cursor, split view, minimap, custom snippets, find & replace with regex
 
 ---
 

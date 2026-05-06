@@ -305,10 +305,28 @@
     const model = getModel();
     if (!model) { setStatus('Set up an AI model first', 'err'); return; }
 
+    // ── Auto project context ─────────────────────────────────
+    let autoCtx = '';
+    if (state.folder) {
+      try {
+        const res = await apiFetch('/ai/project-context?path=' + encodeURIComponent(state.folder));
+        const ctx = await res.json();
+        const folderName = state.folder.split(/[/\\]/).pop();
+        let block = `[Project: ${folderName}] — ${ctx.files.length} files\n`;
+        block += ctx.files.map(f => '  ' + f).join('\n');
+        if (ctx.key_files?.length) {
+          for (const kf of ctx.key_files) {
+            block += `\n\n=== ${kf.path} ===\n${kf.content}`;
+          }
+        }
+        autoCtx = block;
+      } catch {}
+    }
+
     let prompt = text;
     if (elCtx.checked && state.filePath) {
       const fname = state.filePath.split(/[/\\]/).pop();
-      prompt = `File: ${fname}\n\`\`\`\n${state.content}\n\`\`\`\n\n${text}`;
+      prompt = `[Current file: ${fname}]\n\`\`\`\n${state.content}\n\`\`\`\n\n${text}`;
     }
 
     // Prepend pinned project context if any
@@ -318,6 +336,9 @@
     // Prepend project memory if any
     const memCtx = window.sane?.getMemoryContext?.();
     if (memCtx) prompt = memCtx + '\n' + prompt;
+
+    // Prepend live project context (outermost — broadest context first)
+    if (autoCtx) prompt = autoCtx + '\n\n' + prompt;
 
     addMessage('user', text);
     elInput.value = '';
