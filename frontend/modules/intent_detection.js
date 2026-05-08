@@ -157,7 +157,10 @@
     if (!code.trim()) { hide(); return; }
 
     const match = RULES.find(r => r.test(code));
-    if (!match) { hide(); return; }
+    if (!match) { hide(); window.sane._frameworkSignals = null; return; }
+
+    // Expose framework signal to the AI pipeline context assembler
+    window.sane._frameworkSignals = [match.label];
 
     elLabel.textContent = match.label + ' detected';
     elChips.innerHTML = '';
@@ -167,9 +170,10 @@
       chip.className = 'ix-chip';
       chip.textContent = s.text;
       chip.addEventListener('click', () => {
-        const code = elEditor.value;
-        const prompt = `${s.prompt}\n\nHere is the current code:\n\`\`\`\n${code.slice(0, 3000)}\n\`\`\``;
-        document.dispatchEvent(new CustomEvent('sane:ai-ask', { detail: { prompt } }));
+        // Dispatch a natural message — pipeline classifies intent and assembles context
+        document.dispatchEvent(new CustomEvent('sane:ai-ask', {
+          detail: { text: s.text.replace(/^→\s*/, '') }
+        }));
       });
       elChips.appendChild(chip);
     });
@@ -177,7 +181,10 @@
     elBar.classList.remove('ix-hidden');
   }
 
-  function hide() { elBar.classList.add('ix-hidden'); }
+  function hide() {
+    elBar.classList.add('ix-hidden');
+    window.sane._frameworkSignals = null;
+  }
 
   // ── Dismiss ───────────────────────────────────────────────
   elDismiss.addEventListener('click', () => {

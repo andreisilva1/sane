@@ -63,7 +63,6 @@
       name: 'AI',
       cmds: [
         { label: 'AI Refactor',         icon: '✦',  keys: 'Ctrl+Shift+I', action: () => key('I', true, true) },
-        { label: 'Project Builder',     icon: '⬡',  keys: 'Ctrl+Shift+B', action: () => window.sane?.aiEnterPBMode?.() },
         { label: 'Project Context',     icon: '📌', keys: 'Ctrl+Shift+C', action: () => key('C', true, true) },
         { label: 'Project Memory',      icon: '🗒', keys: 'Ctrl+Shift+M', action: () => key('M', true, true) },
         { label: 'Toggle AI Panel',     icon: '✦',  keys: 'Ctrl+Shift+A', action: () => { window.sane?.aiOpenPanel?.() ?? key('A', true, true); } },

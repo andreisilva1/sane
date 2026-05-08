@@ -100,42 +100,7 @@
     });
   }
 
-  // ── Stream ────────────────────────────────────────────────
-  async function streamAsk(prompt) {
-    const model = window.sane?.activeModel;
-    if (!model) { elStatus.textContent = 'No model — set up AI first'; return null; }
-
-    abortCtrl = new AbortController();
-    const res = await fetch('http://localhost:7654/ai/ask', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model, prompt }),
-      signal: abortCtrl.signal,
-    });
-    if (!res.ok) throw new Error(await res.text());
-
-    const reader = res.body.getReader();
-    const dec    = new TextDecoder();
-    let   buf = '', full = '', streamDone = false;
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buf += dec.decode(value, { stream: true });
-      const lines = buf.split('\n');
-      buf = lines.pop();
-      for (const raw of lines) {
-        if (!raw.startsWith('data: ')) continue;
-        let evt; try { evt = JSON.parse(raw.slice(6)); } catch { continue; }
-        if (evt.response) full += evt.response;
-        if (evt.done) { streamDone = true; break; }
-      }
-      if (streamDone) break;
-    }
-    return full;
-  }
-
-  // ── Run refactor ──────────────────────────────────────────
+  // ── Run refactor — delegates to AI pipeline with FILE_EDIT intent ──
   async function run() {
     const task = elInput.value.trim();
     if (!task || !state.content) return;
@@ -147,19 +112,29 @@
     elStatus.textContent = 'Sending to AI…';
     pendingCode = null;
 
-    const fname  = state.filePath.split(/[/\\]/).pop();
-    const prompt =
-      `You are a Python code refactoring assistant.\n\n` +
-      `File: ${fname}\n\`\`\`python\n${state.content}\n\`\`\`\n\n` +
-      `Refactoring task: ${task}\n\n` +
-      `Return ONLY the complete refactored file inside a single \`\`\`python code block. ` +
-      `No explanation, no text outside the block.`;
-
     try {
-      const full = await streamAsk(prompt);
-      if (!full) return;
+      if (!window.sane.activeModel) {
+        elStatus.textContent = 'No model — set up AI first';
+        return;
+      }
 
-      const match = full.match(/```(?:python)?\n([\s\S]*?)```/);
+      abortCtrl = new AbortController();
+      const { execute } = await window.sane.aiPipeline.process(task, {
+        forceIntent: window.sane.INTENT.FILE_EDIT,
+      });
+
+      let full = '';
+      await new Promise(resolve => {
+        execute(
+          token => { full += token; },
+          ()    => resolve(),
+          err   => { if (err) elStatus.textContent = 'Error: ' + err; resolve(); },
+          abortCtrl.signal,
+        );
+      });
+
+      if (!full) return;
+      const match = full.match(/```(?:\w+)?\n([\s\S]*?)```/);
       if (match) {
         pendingCode = match[1];
         renderDiff(state.content, pendingCode);

@@ -8,8 +8,6 @@
   const elSend     = document.getElementById('ai-send');
   const elCtx      = document.getElementById('ai-ctx');
   const elStatus   = document.getElementById('ai-status');
-  const elPBToggle = document.getElementById('ai-pb-toggle');
-
   const TIERS = [
     { id: 'fast',     label: 'Fast',     model: 'qwen2.5-coder',     icon: '⚡' },
     { id: 'balanced', label: 'Balanced', model: 'deepseek-coder-v2', icon: '⚖️' },
@@ -20,8 +18,72 @@
   let activeTierId = localStorage.getItem(STORAGE_KEY) || null;
   let streaming    = false;
   let abortCtrl    = null;
-  let pbMode       = false;
   let pbLocked     = false;
+
+  // ── Markdown renderer ─────────────────────────────────────
+  function renderMarkdown(text) {
+    function esc(s) {
+      return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+    function inline(s) {
+      return esc(s)
+        .replace(/`([^`\n]+)`/g, '<code>$1</code>')
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*(.+?)\*/g, '<em>$1</em>');
+    }
+
+    const lines = text.split('\n');
+    const out = [];
+    let inCode = false, codeLines = [];
+    let inList = false, listOrdered = false;
+
+    function closeList() {
+      if (!inList) return;
+      out.push(listOrdered ? '</ol>' : '</ul>');
+      inList = false;
+    }
+
+    for (const line of lines) {
+      if (line.trimStart().startsWith('```')) {
+        if (!inCode) { closeList(); inCode = true; codeLines = []; }
+        else { inCode = false; out.push(`<pre><code>${codeLines.map(esc).join('\n')}</code></pre>`); }
+        continue;
+      }
+      if (inCode) { codeLines.push(line); continue; }
+
+      const hMatch = line.match(/^(#{1,3}) (.+)/);
+      if (hMatch) {
+        closeList();
+        out.push(`<h${hMatch[1].length}>${inline(hMatch[2])}</h${hMatch[1].length}>`);
+        continue;
+      }
+
+      const ulMatch = line.match(/^[ \t]*[-*+] (.+)/);
+      if (ulMatch) {
+        if (!inList || listOrdered) { closeList(); out.push('<ul>'); inList = true; listOrdered = false; }
+        out.push(`<li>${inline(ulMatch[1])}</li>`);
+        continue;
+      }
+
+      const olMatch = line.match(/^[ \t]*\d+\. (.+)/);
+      if (olMatch) {
+        if (!inList || !listOrdered) { closeList(); out.push('<ol>'); inList = true; listOrdered = true; }
+        out.push(`<li>${inline(olMatch[1])}</li>`);
+        continue;
+      }
+
+      if (line.startsWith('> ')) { closeList(); out.push(`<blockquote>${inline(line.slice(2))}</blockquote>`); continue; }
+      if (/^[-*_]{3,}$/.test(line.trim())) { closeList(); out.push('<hr>'); continue; }
+      if (!line.trim()) { closeList(); out.push('<br>'); continue; }
+
+      closeList();
+      out.push(`<p>${inline(line)}</p>`);
+    }
+
+    closeList();
+    if (inCode) out.push(`<pre><code>${codeLines.map(esc).join('\n')}</code></pre>`);
+    return out.join('');
+  }
 
   // ── Chat history persistence ──────────────────────────────
   const CHAT_KEY    = 'sane_chat_history';
@@ -132,32 +194,6 @@
     elMessages.scrollTop = elMessages.scrollHeight;
   }
 
-  // ── Project Builder mode ──────────────────────────────────
-  function enterPBMode() {
-    pbMode = true;
-    elPBToggle.textContent = '← Chat';
-    elPBToggle.classList.add('pb-active');
-    elInput.placeholder = 'Describe your project… (Enter to generate)';
-    addSeparator('── Project Builder ──');
-  }
-
-  function exitPBMode() {
-    pbMode = false;
-    elPBToggle.textContent = '+ Builder';
-    elPBToggle.classList.remove('pb-active');
-    elInput.placeholder = 'Ask anything… (Enter to send, Shift+Enter for newline)';
-    addSeparator('── Chat ──');
-  }
-
-  function togglePBMode() {
-    if (!elPanel.classList.contains('hidden') && pbMode) exitPBMode();
-    else { open(); enterPBMode(); }
-  }
-
-  elPBToggle.addEventListener('click', () => {
-    pbMode ? exitPBMode() : enterPBMode();
-  });
-
   // ── Open / close ──────────────────────────────────────────
   function open() {
     elPanel.classList.remove('hidden');
@@ -183,7 +219,8 @@
         entries.push({ kind: 'sep', text: el.textContent.trim() });
       } else {
         const role = [...el.classList].find(c => c.startsWith('ai-') && c !== 'ai-msg' && c !== 'ai-streaming' && c !== 'ai-error')?.slice(3) || 'assistant';
-        entries.push({ kind: 'msg', role, text: el.textContent.trim() });
+        const text = el.dataset.raw ?? el.querySelector('.ai-msg-content')?.textContent.trim() ?? el.textContent.trim();
+        entries.push({ kind: 'msg', role, text });
       }
     });
     try { localStorage.setItem(CHAT_KEY, JSON.stringify(entries)); } catch {}
@@ -218,7 +255,12 @@
   function addMessage(role, text) {
     const el = document.createElement('div');
     el.className = 'ai-msg ai-' + role;
-    el.textContent = text;
+    el.dataset.raw = text;
+    const content = document.createElement('div');
+    content.className = 'ai-msg-content';
+    if (role === 'assistant' && text) content.innerHTML = renderMarkdown(text);
+    else content.textContent = text;
+    el.appendChild(content);
     addDelBtn(el);
     elMessages.appendChild(el);
     elMessages.scrollTop = elMessages.scrollHeight;
@@ -238,7 +280,7 @@
 
   let _scrollRaf = null;
   function appendToMessage(el, chunk) {
-    el.insertAdjacentText('beforeend', chunk);
+    (el.querySelector('.ai-msg-content') || el).insertAdjacentText('beforeend', chunk);
     if (!_scrollRaf) {
       _scrollRaf = requestAnimationFrame(() => {
         elMessages.scrollTop = elMessages.scrollHeight;
@@ -264,7 +306,6 @@
 
       window.sane.history?.push();
       if (hasSelection) {
-        // Replace only the selected range
         const before = elEditor.value.slice(0, selStart);
         const after  = elEditor.value.slice(selEnd);
         elEditor.value = before + code + after;
@@ -282,63 +323,36 @@
     msgEl.appendChild(btn);
   }
 
+  // FILE_EDIT mode — replace entire file with the generated code
+  function tryAddFileApplyBtn(msgEl, fullText) {
+    const match = fullText.match(/```(?:\w+)?\n([\s\S]*?)```/);
+    if (!match || !state.filePath) { tryAddApplyBtn(msgEl, fullText); return; }
+    const code = match[1];
+
+    const btn = document.createElement('button');
+    btn.className = 'ai-apply-btn ai-apply-file';
+    btn.textContent = '↳ Apply (replace file)';
+    btn.addEventListener('click', async () => {
+      const elEditor = document.getElementById('editor');
+      window.sane.history?.push();
+      elEditor.value = code;
+      elEditor.dispatchEvent(new Event('input'));
+      state.content = code;
+      state.dirty   = false;
+      await saveFile();
+      btn.textContent = '✓ Applied';
+      btn.disabled = true;
+    });
+    msgEl.appendChild(btn);
+  }
+
   // ── Send ──────────────────────────────────────────────────
   async function send() {
     if (pbLocked) return;
-
-    // Project Builder mode — route to PB handler
-    if (pbMode) {
-      if (streaming) return;
-      const text = elInput.value.trim();
-      if (!text) return;
-      if (!getModel()) { setStatus('Set up an AI model first', 'err'); return; }
-      addMessage('user', text);
-      elInput.value = '';
-      elInput.style.height = '';
-      window.sane.pbHandleSend?.(text);
-      return;
-    }
-
     if (streaming) { abort(); return; }
     const text = elInput.value.trim();
     if (!text) return;
-    const model = getModel();
-    if (!model) { setStatus('Set up an AI model first', 'err'); return; }
-
-    // ── Auto project context ─────────────────────────────────
-    let autoCtx = '';
-    if (state.folder) {
-      try {
-        const res = await apiFetch('/ai/project-context?path=' + encodeURIComponent(state.folder));
-        const ctx = await res.json();
-        const folderName = state.folder.split(/[/\\]/).pop();
-        let block = `[Project: ${folderName}] — ${ctx.files.length} files\n`;
-        block += ctx.files.map(f => '  ' + f).join('\n');
-        if (ctx.key_files?.length) {
-          for (const kf of ctx.key_files) {
-            block += `\n\n=== ${kf.path} ===\n${kf.content}`;
-          }
-        }
-        autoCtx = block;
-      } catch {}
-    }
-
-    let prompt = text;
-    if (elCtx.checked && state.filePath) {
-      const fname = state.filePath.split(/[/\\]/).pop();
-      prompt = `[Current file: ${fname}]\n\`\`\`\n${state.content}\n\`\`\`\n\n${text}`;
-    }
-
-    // Prepend pinned project context if any
-    const projCtx = window.sane?.getProjectContext?.();
-    if (projCtx) prompt = projCtx + '\n' + prompt;
-
-    // Prepend project memory if any
-    const memCtx = window.sane?.getMemoryContext?.();
-    if (memCtx) prompt = memCtx + '\n' + prompt;
-
-    // Prepend live project context (outermost — broadest context first)
-    if (autoCtx) prompt = autoCtx + '\n\n' + prompt;
+    if (!getModel()) { setStatus('Set up an AI model first', 'err'); return; }
 
     addMessage('user', text);
     elInput.value = '';
@@ -346,69 +360,62 @@
 
     const elReply = addMessage('assistant', '');
     elReply.classList.add('ai-streaming');
-
-    streaming = true;
+    streaming  = true;
     elSend.textContent = '■';
     elSend.title = 'Stop';
     abortCtrl = new AbortController();
-    let fullText = '';
+
+    function finalize(fullText, intent) {
+      elReply.classList.remove('ai-streaming');
+      streaming  = false;
+      abortCtrl  = null;
+      elSend.textContent = '↑';
+      elSend.title = 'Send';
+      window.sane._aiSelection = null;
+      if (fullText) {
+        const content = elReply.querySelector('.ai-msg-content');
+        if (content) { elReply.dataset.raw = fullText; content.innerHTML = renderMarkdown(fullText); }
+        if (intent === window.sane.INTENT?.FILE_EDIT) tryAddFileApplyBtn(elReply, fullText);
+        else tryAddApplyBtn(elReply, fullText);
+      }
+      saveHistory();
+    }
 
     try {
-      const res = await fetch('http://localhost:7654/ai/ask', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model, prompt }),
-        signal: abortCtrl.signal,
-      });
+      const { intent, execute } = await window.sane.aiPipeline.process(text);
 
-      if (!res.ok) {
-        const t = await res.text();
-        elReply.textContent = '⚠ ' + t;
-        elReply.classList.add('ai-error');
+      // PROJECT_BUILDER intent → hand off to PB handler
+      if (intent === window.sane.INTENT.BUILDER) {
+        elReply.remove();
+        window.sane.pbHandleSend?.(text);
+        elReply.classList.remove('ai-streaming');
+        streaming = false; abortCtrl = null;
+        elSend.textContent = '↑'; elSend.title = 'Send';
         return;
       }
 
-      const reader     = res.body.getReader();
-      const dec        = new TextDecoder();
-      let   buf        = '';
-      let   streamDone = false;
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buf += dec.decode(value, { stream: true });
-        const lines = buf.split('\n');
-        buf = lines.pop();
-        for (const raw of lines) {
-          if (!raw.startsWith('data: ')) continue;
-          const payload = raw.slice(6).trim();
-          if (!payload) continue;
-          let evt;
-          try { evt = JSON.parse(payload); } catch { continue; }
-          if (evt.response) { fullText += evt.response; appendToMessage(elReply, evt.response); }
-          if (evt.done) { streamDone = true; break; }
-        }
-        if (streamDone) break;
-      }
+      await new Promise(resolve => {
+        execute(
+          token  => appendToMessage(elReply, token),
+          (full, intentType) => { finalize(full, intentType); resolve(); },
+          err    => {
+            const content = elReply.querySelector('.ai-msg-content') || elReply;
+            if (err !== null) {
+              content.textContent = '⚠ ' + err;
+              elReply.classList.add('ai-error');
+            } else if (!content.textContent.trim()) {
+              content.textContent = '(stopped)';
+            }
+            finalize('', null);
+            resolve();
+          },
+          abortCtrl.signal,
+        );
+      });
     } catch (err) {
-      if (err.name !== 'AbortError') {
-        elReply.textContent = '⚠ ' + err.message;
-        elReply.classList.add('ai-error');
-        addDelBtn(elReply);
-      } else {
-        if (!elReply.textContent) {
-          elReply.textContent = '(stopped)';
-          addDelBtn(elReply);
-        }
-      }
-    } finally {
-      elReply.classList.remove('ai-streaming');
-      streaming = false;
-      abortCtrl = null;
-      elSend.textContent = '↑';
-      elSend.title = 'Send';
-      if (fullText) tryAddApplyBtn(elReply, fullText);
-      saveHistory();
+      if (err.message === 'no-model') setStatus('Set up an AI model first', 'err');
+      elReply.remove();
+      finalize('', null);
     }
   }
 
@@ -432,10 +439,6 @@
       e.preventDefault();
       toggle();
     }
-    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'B') {
-      e.preventDefault();
-      togglePBMode();
-    }
     // ESC cancels active stream; if idle, closes panel
     if (e.key === 'Escape' && !elPanel.classList.contains('hidden')) {
       if (streaming) { e.stopPropagation(); abort(); }
@@ -443,11 +446,15 @@
     }
   });
 
+  // Sync "attach file" checkbox with pipeline provider
+  elCtx.addEventListener('change', () => { window.sane._attachFile = elCtx.checked; });
+  window.sane._attachFile = elCtx.checked;
+
   document.addEventListener('sane:ai-ask', async (e) => {
-    const { prompt } = e.detail;
-    if (!prompt) return;
+    const { text, prompt } = e.detail;
+    if (!text && !prompt) return;
     if (elPanel.classList.contains('hidden')) open();
-    elInput.value = prompt;
+    elInput.value = text || prompt || '';
     elInput.style.height = 'auto';
     send();
   });
@@ -485,14 +492,11 @@
     elInput.readOnly = locked;
     elInput.placeholder = locked
       ? 'Building project… please wait'
-      : pbMode
-        ? 'Describe your project… (Enter to generate)'
-        : 'Ask anything… (Enter to send, Shift+Enter for newline)';
-    elSend.disabled  = locked || !getActiveTier();
-    elPBToggle.disabled = locked;
+      : 'Ask anything… (Enter to send, Shift+Enter for newline)';
+    elSend.disabled = locked || !getActiveTier();
   };
   window.sane.aiOpenPanel = open;
-  window.sane.aiEnterPBMode = () => { open(); if (!pbMode) enterPBMode(); };
+  window.sane.aiEnterPBMode = open;
   window.sane.cancelAI = () => { if (streaming) abort(); };
   window.sane.isAIStreaming = () => streaming;
 })();

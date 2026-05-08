@@ -1,7 +1,8 @@
 (function () {
   const elEditor = document.getElementById('editor');
 
-  let active = false; // only for .py files
+  const CODE_EXTS = new Set(['.py','.js','.ts','.go','.java','.c','.cpp','.cs','.rb','.rs','.php','.swift','.kt']);
+  let active = false;
 
   // ── Toolbar element ───────────────────────────────────────
   const elBar = document.createElement('div');
@@ -10,9 +11,9 @@
   document.body.appendChild(elBar);
 
   const ACTIONS = [
-    { id: 'explain',  label: 'Explain',  prompt: sel => `Explain this Python code concisely:\n\`\`\`python\n${sel}\n\`\`\`` },
-    { id: 'improve',  label: 'Improve',  prompt: sel => `Improve this Python code. Show only the improved version with a brief note on what changed:\n\`\`\`python\n${sel}\n\`\`\`` },
-    { id: 'refactor', label: 'Refactor', prompt: sel => `Refactor this Python code for clarity and best practices. Show the refactored version:\n\`\`\`python\n${sel}\n\`\`\`` },
+    { label: 'Explain',  text: 'Explain this code concisely.' },
+    { label: 'Improve',  text: 'Improve this code and show the updated version.' },
+    { label: 'Refactor', text: 'Refactor this code for clarity and best practices.' },
   ];
 
   for (const action of ACTIONS) {
@@ -20,12 +21,14 @@
     btn.className = 'ait-btn';
     btn.textContent = action.label;
     btn.addEventListener('mousedown', (e) => {
-      e.preventDefault(); // don't lose selection
+      e.preventDefault(); // preserve selection
       const sel = elEditor.value.slice(elEditor.selectionStart, elEditor.selectionEnd).trim();
       if (!sel) return;
       hide();
+      // Store selection so the context assembler picks it up
+      window.sane._aiSelection = sel;
       document.dispatchEvent(new CustomEvent('sane:ai-ask', {
-        detail: { prompt: action.prompt(sel) }
+        detail: { text: action.text }
       }));
     });
     elBar.appendChild(btn);
@@ -33,8 +36,7 @@
 
   // ── Show / hide ───────────────────────────────────────────
   function show(x, y) {
-    // Keep inside viewport
-    const barW = 180, barH = 30;
+    const barW = 200, barH = 30;
     const cx = Math.min(Math.max(x - barW / 2, 8), window.innerWidth  - barW - 8);
     const cy = Math.max(y - barH - 8, 8);
     elBar.style.left = cx + 'px';
@@ -42,17 +44,12 @@
     elBar.classList.remove('hidden');
   }
 
-  function hide() {
-    elBar.classList.add('hidden');
-  }
+  function hide() { elBar.classList.add('hidden'); }
 
   // ── Selection detection ───────────────────────────────────
   function checkSelection(mouseX, mouseY) {
     if (!active) return hide();
-    const start = elEditor.selectionStart;
-    const end   = elEditor.selectionEnd;
-    if (end <= start) return hide();
-    const sel = elEditor.value.slice(start, end).trim();
+    const sel = elEditor.value.slice(elEditor.selectionStart, elEditor.selectionEnd).trim();
     if (!sel) return hide();
     show(mouseX, mouseY);
   }
@@ -65,12 +62,11 @@
     if (e.shiftKey) {
       const rect = elEditor.getBoundingClientRect();
       setTimeout(() => checkSelection(rect.left + rect.width / 2, rect.top + 40), 10);
-    } else if (!e.shiftKey) {
+    } else {
       hide();
     }
   });
 
-  // Hide on click elsewhere
   document.addEventListener('mousedown', (e) => {
     if (!elBar.contains(e.target)) hide();
   });
@@ -80,7 +76,8 @@
   window.sane = window.sane || {};
   window.sane.onFileOpen = (path) => {
     if (prev) prev(path);
-    active = !!(path && path.endsWith('.py'));
+    const ext = path ? path.slice(path.lastIndexOf('.')).toLowerCase() : '';
+    active = CODE_EXTS.has(ext);
     hide();
   };
 })();

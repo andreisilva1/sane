@@ -14,7 +14,6 @@
 | `Ctrl+,` | Theme panel |
 | `Ctrl+Shift+I` | AI Refactor |
 | `Ctrl+Shift+A` | Toggle AI panel |
-| `Ctrl+Shift+B` | Toggle Project Builder mode |
 | `Ctrl+Shift+V` | Toggle HTML Preview |
 | `Ctrl+Shift+T` | Task Mode / Execution Timeline |
 | `Ctrl+Shift+C` | Project Context |

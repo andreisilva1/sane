@@ -134,7 +134,7 @@
       `RULES:\n` +
       `1. Output starts with { and ends with } — nothing else. No markdown, no explanation.\n` +
       `2. First entry must be README.md.\n` +
-      `3. Include every file the project needs to run.\n` +
+      `3. Include EVERY file the project needs to run — source files AND all config/setup files (package.json, requirements.txt, vite.config.js, tsconfig.json, .env.example, Makefile, etc.). Never omit dependency manifests.\n` +
       `4. Do NOT include a "content" field — file paths and descriptions only.`
     );
   }
@@ -263,94 +263,6 @@
     }
   }
 
-  // ── Phase 3 prompt: run commands ─────────────────────────
-  function buildRunPrompt() {
-    const files = plan.steps.map(s => s.file).join(', ');
-    return (
-      `You are a project setup assistant. Given the project below, list the shell commands the user must run to start it locally.\n\n` +
-      `PROJECT: ${plan.summary}\n` +
-      `STACK: ${plan.stack}\n` +
-      `FILES: ${files}\n\n` +
-      `Output ONLY a JSON object in this exact shape — nothing else:\n` +
-      `{"run":[{"label":"Terminal 1","command":"cd someFolder && npm install && npm run dev"},{"label":"Terminal 2","command":"cd otherFolder && python main.py"}]}\n\n` +
-      `RULES:\n` +
-      `1. Combine all commands for one terminal into a single "command" string using &&.\n` +
-      `2. Always start with cd <folder> if the commands must run in a subfolder; use . for the project root.\n` +
-      `3. "label" is "Terminal 1", "Terminal 2", etc.\n` +
-      `4. Include only commands the user must actually run (install deps, start servers, etc.). No git init, no mkdir.\n` +
-      `5. If a single terminal suffices, return an array with one entry.\n` +
-      `6. Output starts with { and ends with } — no markdown, no explanation.`
-    );
-  }
-
-  // ── Phase 3: suggest run commands ────────────────────────
-  async function suggestRunCommands() {
-    const elMessages = document.getElementById('ai-messages');
-    const loadEl = document.createElement('div');
-    loadEl.className = 'ai-msg ai-pb-system';
-    loadEl.innerHTML = '<span class="pb-spinner">⟳</span> Generating run commands<span class="pb-dots"></span>';
-    elMessages.appendChild(loadEl);
-    elMessages.scrollTop = elMessages.scrollHeight;
-
-    try {
-      const full = await streamAsk(buildRunPrompt());
-      const raw  = extractJson(full);
-      if (!raw) return;
-
-      const parsed = parsePlan(raw);
-      const entries = parsed?.run;
-      if (!Array.isArray(entries) || entries.length === 0) return;
-
-      const card = document.createElement('div');
-      card.className = 'pb-run-card';
-
-      const title = document.createElement('div');
-      title.className = 'pb-run-title';
-      title.textContent = 'To run this project:';
-      card.appendChild(title);
-
-      for (const entry of entries) {
-        if (!entry.label || !entry.command) continue;
-        const item = document.createElement('div');
-        item.className = 'pb-run-item';
-
-        const lbl = document.createElement('div');
-        lbl.className = 'pb-run-label';
-        lbl.textContent = entry.label;
-        item.appendChild(lbl);
-
-        const row = document.createElement('div');
-        row.className = 'pb-run-cmd-row';
-
-        const code = document.createElement('code');
-        code.className = 'pb-run-cmd';
-        code.textContent = entry.command;
-        row.appendChild(code);
-
-        const copyBtn = document.createElement('button');
-        copyBtn.className = 'pb-run-copy';
-        copyBtn.textContent = 'copy';
-        copyBtn.addEventListener('click', () => {
-          navigator.clipboard.writeText(entry.command).then(() => {
-            copyBtn.textContent = '✓';
-            setTimeout(() => { copyBtn.textContent = 'copy'; }, 1500);
-          });
-        });
-        row.appendChild(copyBtn);
-        item.appendChild(row);
-        card.appendChild(item);
-      }
-
-      elMessages.appendChild(card);
-      elMessages.scrollTop = elMessages.scrollHeight;
-
-    } catch (_) {
-      // silent fail — run commands are optional
-    } finally {
-      loadEl.remove();
-    }
-  }
-
   // ── Phase 2: generate + write each file ──────────────────
   async function executePlan(startIdx = 0) {
     if (!plan?.steps?.length) return;
@@ -412,8 +324,6 @@
       });
       doneMsg.appendChild(btn);
     }
-
-    await suggestRunCommands();
 
     plan = null;
     window.sane.aiLockInput(false);
