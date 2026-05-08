@@ -149,10 +149,13 @@
 
   // ── Output helpers ────────────────────────────────────────
   function appendLine(sess, text, cls) {
+    const ansiToHtml  = window.sane.ansiToHtml;
+    const classifyLine = window.sane.classifyLine;
     String(text).split('\n').forEach(line => {
-      const el = document.createElement('div');
-      el.className = 'term-line ' + cls;
-      el.textContent = line;
+      const el    = document.createElement('div');
+      const extra = (cls === 'term-stdout' || cls === 'term-stderr') ? classifyLine(line) : '';
+      el.className = 'term-line ' + cls + (extra ? ' ' + extra : '');
+      el.innerHTML = ansiToHtml(line);
       sess.body.appendChild(el);
     });
     sess.body.scrollTop = sess.body.scrollHeight;
@@ -161,6 +164,7 @@
   function appendCmd(sess, label, text) {
     const el = document.createElement('div');
     el.className = 'term-line term-cmd';
+    // User-typed commands — plain text, no ANSI needed
     el.textContent = label + ' ' + text;
     sess.body.appendChild(el);
     sess.body.scrollTop = sess.body.scrollHeight;

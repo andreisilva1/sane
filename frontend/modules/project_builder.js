@@ -177,6 +177,128 @@
     'fastapi':  null, // Python uses requirements.txt — no npm presets
   };
 
+  // ── UI layout presets ─────────────────────────────────────
+  // Injected into component prompts to enforce visual consistency.
+  // The LLM composes using these primitives instead of inventing new ones.
+  const UI_PRESETS = {
+    dashboard: {
+      description: 'Admin dashboard — fixed sidebar + header + scrollable main',
+      pageWrapper:  'flex min-h-screen bg-slate-100',
+      sidebar:      'w-64 bg-slate-900 text-white flex flex-col p-4 shrink-0',
+      main:         'flex-1 flex flex-col overflow-hidden',
+      header:       'h-16 bg-white border-b border-slate-200 flex items-center px-6 shrink-0',
+      content:      'flex-1 overflow-auto p-6',
+      card:         'bg-white rounded-lg border border-slate-200 p-6 shadow-sm',
+      grid:         'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4',
+      navItem:      'flex items-center gap-3 px-3 py-2 rounded-md text-sm text-slate-300 hover:text-white hover:bg-slate-800 transition-colors',
+      navItemActive:'flex items-center gap-3 px-3 py-2 rounded-md text-sm text-white bg-slate-800',
+      btn: {
+        primary:   'bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors',
+        secondary: 'bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-md text-sm font-medium transition-colors',
+        ghost:     'hover:bg-slate-100 text-slate-600 px-4 py-2 rounded-md text-sm font-medium transition-colors',
+      },
+      heading: 'text-2xl font-bold text-slate-900',
+      subtext: 'text-sm text-slate-500',
+    },
+    saas: {
+      description: 'SaaS app — sticky top nav + max-w-7xl centered content',
+      pageWrapper:  'min-h-screen bg-slate-50',
+      nav:          'sticky top-0 z-10 bg-white border-b border-slate-200 h-16',
+      navInner:     'max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-full flex items-center justify-between',
+      content:      'max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8',
+      card:         'bg-white rounded-xl border border-slate-200 p-6 shadow-sm',
+      grid:         'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6',
+      btn: {
+        primary:   'bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors',
+        secondary: 'border border-slate-200 hover:bg-slate-50 text-slate-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors',
+      },
+      heading: 'text-3xl font-bold text-slate-900',
+      subtext: 'text-slate-600',
+    },
+    crud: {
+      description: 'Data management — top nav + max-w-6xl table/form content',
+      pageWrapper:  'min-h-screen bg-slate-50',
+      nav:          'bg-white border-b border-slate-200 h-14',
+      navInner:     'max-w-6xl mx-auto px-8 h-full flex items-center gap-4',
+      content:      'max-w-6xl mx-auto px-8 py-8',
+      card:         'bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden',
+      tableHeader:  'bg-slate-50 border-b border-slate-200 px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider',
+      tableCell:    'px-6 py-4 text-sm text-slate-700',
+      input:        'w-full border border-slate-200 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500',
+      btn: {
+        primary:   'bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded text-sm font-medium transition-colors',
+        secondary: 'bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 px-3 py-1.5 rounded text-sm font-medium transition-colors',
+        danger:    'text-red-600 hover:text-red-700 hover:bg-red-50 px-3 py-1.5 rounded text-sm font-medium transition-colors',
+      },
+      heading: 'text-xl font-semibold text-slate-900',
+      subtext: 'text-sm text-slate-500',
+    },
+    minimal: {
+      description: 'Minimal app — centered max-w-2xl single column',
+      pageWrapper:  'min-h-screen bg-white',
+      content:      'max-w-2xl mx-auto px-4 py-8',
+      card:         'bg-slate-50 rounded-lg p-6',
+      section:      'space-y-6',
+      input:        'w-full border border-slate-200 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-500',
+      btn: {
+        primary:   'bg-slate-900 hover:bg-slate-700 text-white px-4 py-2 rounded text-sm font-medium transition-colors',
+        secondary: 'border border-slate-200 hover:bg-slate-50 text-slate-700 px-4 py-2 rounded text-sm font-medium transition-colors',
+      },
+      heading: 'text-2xl font-bold text-slate-900',
+      subtext: 'text-slate-500 text-sm',
+    },
+  };
+
+  function detectUiPreset(plan) {
+    if (!plan) return 'minimal';
+    const text = (
+      (plan.summary || '') + ' ' +
+      (plan.stack   || '') + ' ' +
+      (plan.steps   || []).map(s => (s.file || '') + ' ' + (s.description || '')).join(' ')
+    ).toLowerCase();
+    if (/dashboard|admin|analytics|metrics|stats|chart|panel|monitor/.test(text)) return 'dashboard';
+    if (/saas|landing|pricing|auth|login|signup|hero|marketing/.test(text))       return 'saas';
+    if (/crud|table|manage|inventory|record|list|form.*edit|create.*edit/.test(text)) return 'crud';
+    return 'minimal';
+  }
+
+  function isTailwind(stack, steps) {
+    const s = (stack || '').toLowerCase();
+    const d = (steps || []).map(st => (st.file + ' ' + (st.description || '')).toLowerCase()).join(' ');
+    return s.includes('tailwind') || d.includes('tailwind');
+  }
+
+  // Builds a stable UI design system block injected into component prompts.
+  function buildUiContext(plan) {
+    if (!plan) return '';
+    const tw = isTailwind(plan.stack, plan.steps);
+    if (!tw) return '';
+    const key    = detectUiPreset(plan);
+    const preset = UI_PRESETS[key];
+    const lines  = [`UI DESIGN SYSTEM (${preset.description}):`];
+
+    // Layout primitives
+    const layoutKeys = ['pageWrapper','sidebar','main','header','content','nav','navInner','section'];
+    for (const k of layoutKeys) {
+      if (preset[k]) lines.push(`  ${k}: "${preset[k]}"`);
+    }
+    // Cards / tables
+    for (const k of ['card','grid','tableHeader','tableCell','input','navItem','navItemActive']) {
+      if (preset[k]) lines.push(`  ${k}: "${preset[k]}"`);
+    }
+    // Buttons
+    if (preset.btn) {
+      for (const [variant, cls] of Object.entries(preset.btn))
+        lines.push(`  button.${variant}: "${cls}"`);
+    }
+    // Typography
+    if (preset.heading) lines.push(`  heading: "${preset.heading}"`);
+    if (preset.subtext) lines.push(`  subtext: "${preset.subtext}"`);
+
+    lines.push('USE these exact className values consistently across all components. Do NOT invent new spacing or color patterns.');
+    return lines.join('\n') + '\n\n';
+  }
+
   function detectPreset(stack, steps) {
     const s = (stack || '').toLowerCase();
     const files = (steps || []).map(st => st.file.toLowerCase());
@@ -443,7 +565,8 @@
       `7. Do NOT include a "content" field — file paths and descriptions only.\n` +
       `8. Generate package.json as the LAST step (after all source files), so all dependencies are known.\n` +
       `9. TypeScript projects must include tsconfig.json. Node+TS projects must include tsconfig.json and package.json with ts-node or tsx in devDependencies.\n` +
-      `10. Use .tsx extension for React component files and .ts for non-JSX TypeScript files.`
+      `10. Use .tsx extension for React component files and .ts for non-JSX TypeScript files.\n` +
+      `11. Tailwind projects MUST include: tailwind.config.ts (or .js), postcss.config.js, and a globals.css (or index.css) with @tailwind directives. All three are required — never omit any.`
     );
   }
 
@@ -494,6 +617,36 @@
       );
     }
 
+    if (f.match(/tailwind\.config\.[tj]s$/)) {
+      hints.push(
+        '- content must include: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"]',
+        '- Use theme.extend — do NOT override Tailwind default values.',
+        '- Do NOT use purge or variants arrays — deprecated in Tailwind 3.',
+        '- Do NOT manually enable JIT mode — it is the default.',
+        '- Export as: export default { content: [...], theme: { extend: {} }, plugins: [] }',
+      );
+    }
+
+    if (f.match(/postcss\.config\.(js|cjs|mjs|ts)$/)) {
+      hints.push(
+        '- ONLY two plugins: tailwindcss and autoprefixer.',
+        '- Exact export: export default { plugins: { tailwindcss: {}, autoprefixer: {} } }',
+        '- Do NOT add other plugins unless explicitly requested.',
+      );
+    }
+
+    if (/^(src\/)?(globals?|index|styles?|app)\.css$/.test(f)) {
+      hints.push(
+        '- File MUST start with these exact three lines in order:',
+        '  @tailwind base;',
+        '  @tailwind components;',
+        '  @tailwind utilities;',
+        '- Add custom styles AFTER the directives using @layer base {} or @layer components {}.',
+        '- Do NOT use @import "tailwindcss" — use @tailwind directives.',
+        '- Keep this file minimal — component styles belong in JSX className props.',
+      );
+    }
+
     if (isReact && (f.endsWith('.tsx') || f.endsWith('.jsx'))) {
       hints.push(
         '- NEVER put <script> tags inside JSX — they are ignored by React.',
@@ -502,6 +655,26 @@
         '- All component props must be typed with a TypeScript interface.',
         '- Import every hook, type, and named export you use.',
         '- Use react-router-dom v6 API: import { Link, useNavigate } from "react-router-dom".',
+      );
+      if (isTailwind(stack, plan?.steps)) {
+        hints.push(
+          '- USE ONLY valid Tailwind 3 utility classes — never invent class names.',
+          '- Spacing: prefer p-4, p-6, p-8, gap-4, gap-6, space-y-4, space-y-6.',
+          '- Colors: slate-* for neutrals, blue-600 for primary actions, red-* for danger.',
+          '- Borders: "border border-slate-200", rounded, rounded-lg. Shadows: shadow-sm only.',
+          '- Avoid arbitrary values like w-[347px] — use Tailwind scale (w-80, w-96, max-w-xl).',
+          '- Avoid inline styles. Avoid deeply nested divs — keep markup flat and readable.',
+          '- Use the UI design system classes defined above for layout and buttons.',
+        );
+      }
+      // Defensive coding rules — applied to every React component regardless of styling
+      hints.push(
+        '- DEFENSIVE PATTERNS (always apply):',
+        '  · Never call .map() or .length directly on data from props, state, or API — use (items ?? []).map(...)',
+        '  · Initialize useState with safe defaults: [] for arrays, {} for objects, "" for strings, 0 for numbers',
+        '  · Use optional chaining for prop access: item?.name, not item.name',
+        '  · Wrap async data in a loading check: if (!data) return <LoadingSpinner />',
+        '  · Every import must be at the top — no dynamic require(), no missing imports',
       );
     }
 
@@ -565,8 +738,263 @@
     return hints.length ? `IMPORTANT RULES FOR THIS FILE:\n${hints.join('\n')}\n\n` : '';
   }
 
+  // ── Import validation + refine pipeline ──────────────────
+  // Maps symbols to the npm package they must be imported from.
+  const IMPORT_RULES = {
+    // React hooks
+    useState:        'react',
+    useEffect:       'react',
+    useRef:          'react',
+    useCallback:     'react',
+    useMemo:         'react',
+    useContext:      'react',
+    useReducer:      'react',
+    useId:           'react',
+    useLayoutEffect: 'react',
+    createContext:   'react',
+    forwardRef:      'react',
+    memo:            'react',
+    // React-Router-Dom v6
+    BrowserRouter:   'react-router-dom',
+    Routes:          'react-router-dom',
+    Route:           'react-router-dom',
+    Link:            'react-router-dom',
+    NavLink:         'react-router-dom',
+    Navigate:        'react-router-dom',
+    Outlet:          'react-router-dom',
+    useNavigate:     'react-router-dom',
+    useParams:       'react-router-dom',
+    useLocation:     'react-router-dom',
+    useSearchParams: 'react-router-dom',
+  };
+
+  // Files that always get a second refine pass regardless of issue count.
+  const CRITICAL_FILES = new Set([
+    'src/app.tsx', 'src/app.jsx', 'app.tsx', 'app.jsx',
+    'src/main.tsx', 'src/main.jsx', 'main.tsx',
+    'src/index.tsx', 'src/index.jsx',
+    'src/router.tsx', 'src/routes.tsx', 'src/routing.tsx',
+  ]);
+
+  // Checks whether a symbol is imported from the expected source.
+  // Handles both single-line and multi-line import blocks.
+  function isImported(code, symbol, source) {
+    const clean  = code.replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
+    const blocks = [...clean.matchAll(/import[\s\S]*?from\s+['"]([^'"]+)['"]/g)];
+    return blocks.some(([block, src]) =>
+      src === source && new RegExp(`\\b${symbol}\\b`).test(block)
+    );
+  }
+
+  // Returns [{symbol, source}] for every symbol used but not imported.
+  function validateImports(code) {
+    const missing = [];
+    const seen    = new Set();
+    for (const [symbol, source] of Object.entries(IMPORT_RULES)) {
+      if (seen.has(symbol)) continue;
+      const isComponent = /^[A-Z]/.test(symbol); // PascalCase → JSX tag check
+      const used = isComponent
+        ? new RegExp(`<${symbol}[\\s/>]`).test(code)
+        : new RegExp(`\\b${symbol}\\(`).test(code);
+      if (!used) continue;
+      if (isImported(code, symbol, source)) continue;
+      missing.push({ symbol, source });
+      seen.add(symbol);
+    }
+    return missing;
+  }
+
+  // Builds a focused correction prompt for the refine pass.
+  function buildRefinePrompt(step, content, missingImports) {
+    const isCrit = CRITICAL_FILES.has(step.file.toLowerCase());
+    const fixLines = [];
+
+    if (missingImports.length) {
+      const grouped = {};
+      for (const { symbol, source } of missingImports)
+        (grouped[source] = grouped[source] || []).push(symbol);
+      fixLines.push('ADD THESE MISSING IMPORTS:');
+      for (const [src, syms] of Object.entries(grouped))
+        fixLines.push(`  import { ${syms.join(', ')} } from '${src}'`);
+      fixLines.push('');
+    }
+
+    return (
+      `You are reviewing a generated React file. Fix all issues and output the complete corrected file.\n\n` +
+      `File: ${step.file}\n` +
+      `Project: ${plan.summary} (${plan.stack})\n\n` +
+      (fixLines.length ? fixLines.join('\n') + '\n' : '') +
+      `ALSO CHECK AND FIX:\n` +
+      `- Every JSX component and hook used must have a corresponding import\n` +
+      `- Any .map() or .length on potentially undefined values → add ?? [] guard\n` +
+      `- Any props accessed without null checks → add optional chaining (?.) \n` +
+      `- useState must have safe initial values (never undefined for arrays/objects)\n` +
+      (isCrit ? `- BrowserRouter must NOT appear here unless this file is main.tsx or index.tsx\n` : '') +
+      (isCrit ? `- All routes must reference components that exist in the project file list\n` : '') +
+      `\nCURRENT FILE:\n${content}\n\n` +
+      `Output ONLY the corrected file — no explanation, no markdown fences.`
+    );
+  }
+
+  // Validates imports and runs a refine LLM pass when needed.
+  // Always refines critical files; refines others only when issues found.
+  async function refineIfNeeded(step, content, progressMsg) {
+    const f = step.file.toLowerCase();
+    if (!f.endsWith('.tsx') && !f.endsWith('.jsx')) return content;
+
+    const isCrit       = CRITICAL_FILES.has(f);
+    const missingImps  = validateImports(content);
+    if (!missingImps.length && !isCrit) return content;
+
+    progressMsg.innerHTML =
+      `<span class="pb-spinner">⟳</span> ${escHtml(step.file)}<span class="pb-sanitize-note"> · refining…</span>`;
+
+    try {
+      const refined = await streamAsk(buildRefinePrompt(step, content, missingImps));
+      return stripFences(refined) || content;
+    } catch {
+      return content; // refine failed → use original, don't crash the build
+    }
+  }
+
+  // ── Cross-file import/export coherence ───────────────────
+
+  // Builds a map of what each generated file actually exports.
+  // Returns Map<normalizedPath → { hasDefault, defaultExport, named: Set<string> }>
+  function buildExportIndex(generated) {
+    const index = new Map();
+    for (const { step, content } of generated) {
+      const normPath = step.file.replace(/\\/g, '/').toLowerCase();
+      const info     = { hasDefault: false, defaultExport: null, named: new Set() };
+      const clean    = content.replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
+
+      // export default function/class Name
+      const namedDef = clean.match(/export\s+default\s+(?:function|class)\s+(\w+)/);
+      if (namedDef) { info.hasDefault = true; info.defaultExport = namedDef[1]; }
+
+      // any other export default (arrow function, expression, anonymous)
+      if (!info.hasDefault && /export\s+default\s+/.test(clean)) info.hasDefault = true;
+
+      // export const/function/class/type/interface/enum/let/var Name
+      for (const m of clean.matchAll(/export\s+(?:const|function|class|type|interface|enum|let|var)\s+(\w+)/g))
+        info.named.add(m[1]);
+
+      // export { Foo, Bar as Baz } — captures the public (exported) name
+      for (const m of clean.matchAll(/export\s*\{([^}]+)\}/g)) {
+        for (const part of m[1].split(',')) {
+          const t    = part.trim();
+          const asM  = t.match(/\w+\s+as\s+(\w+)/);
+          if (asM)              info.named.add(asM[1]);
+          else if (/^\w+$/.test(t)) info.named.add(t);
+        }
+      }
+
+      index.set(normPath, info);
+    }
+    return index;
+  }
+
+  // Resolves a relative import path from a given file to a normalized project path.
+  function resolveImportPath(fromFile, importPath) {
+    const dir   = fromFile.replace(/\\/g, '/').split('/').slice(0, -1).join('/');
+    const parts = (dir ? dir + '/' + importPath : importPath).replace(/\\/g, '/').split('/');
+    const out   = [];
+    for (const p of parts) {
+      if (p === '..') out.pop();
+      else if (p !== '.') out.push(p);
+    }
+    return out.join('/').toLowerCase();
+  }
+
+  // Validates that relative imports match what target files actually export.
+  // Returns [{step, content, filePath, mismatches}] only for files with issues.
+  function validateCrossImports(generated, exportIndex) {
+    const results = [];
+    for (const item of generated) {
+      const { step, content } = item;
+      const f = step.file.replace(/\\/g, '/').toLowerCase();
+      if (!/\.(tsx?|jsx?)$/.test(f)) continue;
+
+      const mismatches = [];
+      const clean = content.replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
+
+      for (const [, clause, importPath] of clean.matchAll(/import\s+([\s\S]*?)\s+from\s+['"]([^'"]+)['"]/g)) {
+        if (!importPath.startsWith('.')) continue;
+
+        const base   = resolveImportPath(f, importPath);
+        const target = ['', '.tsx', '.ts', '.jsx', '.js',
+                        '/index.tsx', '/index.ts', '/index.jsx', '/index.js']
+                        .map(e => base + e).find(c => exportIndex.has(c));
+        if (!target) continue;
+
+        const info       = exportIndex.get(target);
+        const trimClause = clause.trim();
+
+        // Default import: `import Foo from '...'`
+        if (!trimClause.startsWith('{') && !trimClause.startsWith('*') && /^\w+/.test(trimClause)) {
+          const name = trimClause.match(/^(\w+)/)[1];
+          if (!info.hasDefault) {
+            mismatches.push({
+              type: 'default-missing', symbol: name, sourcePath: importPath,
+              suggestion: info.named.has(name) ? `use { ${name} } instead` : 'target has no default export',
+            });
+          }
+        }
+
+        // Named imports: `import { Foo, Bar as Baz } from '...'`
+        const namedBlock = trimClause.match(/\{([^}]+)\}/);
+        if (namedBlock) {
+          for (const part of namedBlock[1].split(',')) {
+            const origName = part.trim().split(/\s+as\s+/)[0].trim();
+            if (!origName || !/^\w+$/.test(origName)) continue;
+            if (!info.named.has(origName)) {
+              mismatches.push({
+                type: 'named-missing', symbol: origName, sourcePath: importPath,
+                suggestion: info.defaultExport === origName
+                  ? `use default import: import ${origName} from '${importPath}'`
+                  : 'symbol not exported by target file',
+              });
+            }
+          }
+        }
+      }
+
+      if (mismatches.length) results.push({ ...item, mismatches });
+    }
+    return results;
+  }
+
+  function buildCrossRefinePrompt(step, content, mismatches) {
+    const fixes = mismatches.map(m =>
+      m.type === 'default-missing'
+        ? `  - import ${m.symbol} from '${m.sourcePath}': no default export — ${m.suggestion}`
+        : `  - import { ${m.symbol} } from '${m.sourcePath}': not a named export — ${m.suggestion}`
+    );
+    return (
+      `Fix import/export mismatches in this file. Output the complete corrected file.\n\n` +
+      `File: ${step.file}\nProject: ${plan.summary} (${plan.stack})\n\n` +
+      `MISMATCHES TO FIX:\n${fixes.join('\n')}\n\n` +
+      `CURRENT FILE:\n${content}\n\n` +
+      `Output ONLY the corrected file — no explanation, no markdown fences.`
+    );
+  }
+
+  async function refineCrossImports(step, content, mismatches) {
+    try {
+      const refined = await streamAsk(buildCrossRefinePrompt(step, content, mismatches));
+      return stripFences(refined) || content;
+    } catch {
+      return content;
+    }
+  }
+
   // ── Phase 2 prompt: single file content (raw text) ───────
   function buildFilePrompt(step) {
+    const f        = step.file.toLowerCase();
+    const isUiFile = f.endsWith('.tsx') || f.endsWith('.jsx') ||
+                     f.endsWith('.css') || f.match(/tailwind\.config|postcss\.config/);
+    const uiCtx    = isUiFile ? buildUiContext(plan) : '';
+
     const allFiles = plan.steps
       .map(s => `  ${s.file}  —  ${s.description}`)
       .join('\n');
@@ -574,6 +1002,7 @@
       `Project: ${plan.summary}\n` +
       `Stack: ${plan.stack}\n\n` +
       `All project files:\n${allFiles}\n\n` +
+      (uiCtx ? uiCtx : '') +
       `Write the complete content for: ${step.file}\n` +
       `Purpose: ${step.description}\n\n` +
       stackHints(step.file, plan.stack) +
@@ -731,7 +1160,8 @@
     if (activeCard) { disableCard(activeCard); activeCard = null; }
 
     window.sane.aiLockInput(true);
-    const total = plan.steps.length;
+    const total     = plan.steps.length;
+    const generated = []; // collected for cross-file coherence validation
 
     for (let i = startIdx; i < total; i++) {
       const step     = plan.steps[i];
@@ -744,6 +1174,12 @@
       try {
         const raw   = await streamAsk(buildFilePrompt(step));
         let content = stripFences(raw);
+
+        // Validate imports + refine pass for component files
+        content = await refineIfNeeded(step, content, progressMsg);
+
+        // Update spinner after possible refine pass (label may have changed)
+        progressMsg.innerHTML = `<span class="pb-spinner">⟳</span> ${escHtml(label)}`;
 
         // Post-process manifest files to correct hallucinated versions/packages
         const fname    = step.file.split(/[/\\]/).pop().toLowerCase();
@@ -767,6 +1203,7 @@
         } else {
           progressMsg.textContent = `✓ ${label}`;
         }
+        generated.push({ step, content, filePath });
         saveProgress(i + 1);
       } catch (err) {
         if (err.name === 'AbortError') {
@@ -779,6 +1216,37 @@
         addMsg('ai-pb-error', `Build stopped at "${step.file}".`);
         window.sane.aiLockInput(false);
         return;
+      }
+    }
+
+    // ── Cross-file coherence pass ─────────────────────────
+    const hasComponents = generated.some(g => /\.(tsx|jsx)$/.test(g.step.file));
+    if (hasComponents && generated.length > 1) {
+      const crossMsg = addMsg('ai-pb-system', '');
+      crossMsg.innerHTML = '<span class="pb-spinner">⟳</span> Validating cross-file imports…';
+      try {
+        const exportIndex = buildExportIndex(generated);
+        const crossIssues = validateCrossImports(generated, exportIndex);
+        let   fixedCount  = 0;
+
+        for (const { step, content: orig, filePath: fp, mismatches } of crossIssues) {
+          crossMsg.innerHTML = `<span class="pb-spinner">⟳</span> Fixing imports in ${escHtml(step.file)}…`;
+          const refined = await refineCrossImports(step, orig, mismatches);
+          if (refined !== orig) {
+            await apiFetch('/file?path=' + encodeURIComponent(fp), {
+              method:  'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body:    JSON.stringify({ content: refined }),
+            });
+            fixedCount++;
+          }
+        }
+
+        crossMsg.textContent = crossIssues.length === 0
+          ? '✓ Cross-file imports validated'
+          : `✓ Cross-file imports validated${fixedCount ? ` — fixed ${fixedCount} file${fixedCount !== 1 ? 's' : ''}` : ''}`;
+      } catch {
+        crossMsg.textContent = '✓ Cross-file validation skipped';
       }
     }
 

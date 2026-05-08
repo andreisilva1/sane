@@ -121,6 +121,7 @@
     elVenvInfo.textContent  = '';
     elElapsed.textContent   = '';
     Object.keys(openLine).forEach(k => delete openLine[k]);
+    Object.keys(openLineRaw).forEach(k => delete openLineRaw[k]);
     document.getElementById('ri-bar')?.classList.add('hidden');
     document.dispatchEvent(new CustomEvent('sane:runstart'));
     window.sane?.showOutputTab?.();
@@ -235,25 +236,42 @@
 
   // openLine tracks the current open <div> per stream type so partial
   // lines (e.g. input() prompts without \n) accumulate in the same element.
-  const openLine = {};
+  // openLineRaw holds the corresponding raw (pre-ANSI) text for re-rendering.
+  const openLine    = {};
+  const openLineRaw = {};
 
   function appendText(type, text) {
+    const ansiToHtml   = window.sane.ansiToHtml;
+    const classifyLine = window.sane.classifyLine;
     const segs = text.split('\n');
+
     for (let i = 0; i < segs.length; i++) {
       if (!openLine[type]) {
         const div = document.createElement('div');
         div.className = 'out-line out-' + type;
         elOutput.appendChild(div);
-        openLine[type] = div;
+        openLine[type]    = div;
+        openLineRaw[type] = '';
       }
-      openLine[type].textContent += segs[i];
-      if (i < segs.length - 1) openLine[type] = null; // newline closes line
+      openLineRaw[type] += segs[i];
+      openLine[type].innerHTML = ansiToHtml(openLineRaw[type]);
+
+      if (i < segs.length - 1) {
+        // Line complete — apply content-based classification for stdout/stderr
+        if (type === 'stdout' || type === 'stderr') {
+          const extra = classifyLine(openLineRaw[type]);
+          if (extra) openLine[type].classList.add(extra);
+        }
+        openLine[type]    = null;
+        openLineRaw[type] = null;
+      }
     }
     elOutput.scrollTop = elOutput.scrollHeight;
   }
 
   function appendLine(type, text) {
-    openLine[type] = null;
+    openLine[type]    = null;
+    openLineRaw[type] = null;
     appendText(type, text + '\n');
   }
 

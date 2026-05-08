@@ -9,7 +9,7 @@ Built-in AI. Zero cloud. Keyboard-first.
 
 [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows-0078D4?style=flat-square&logo=windows&logoColor=white)](https://github.com/andreisilva1/sane/releases/latest)
-[![Version](https://img.shields.io/badge/version-1.1.0-22863a?style=flat-square)](https://github.com/andreisilva1/sane/releases/latest)
+[![Version](https://img.shields.io/badge/version-1.2.0-22863a?style=flat-square)](https://github.com/andreisilva1/sane/releases/latest)
 
 [![Tauri](https://img.shields.io/badge/Tauri-24C8D8?style=flat-square&logo=tauri&logoColor=white)](https://tauri.app)
 [![Rust](https://img.shields.io/badge/Rust-000000?style=flat-square&logo=rust&logoColor=white)](https://www.rust-lang.org)
@@ -226,6 +226,14 @@ Performance depends on your hardware. A modern machine with 16 GB RAM handles th
 ---
 
 ## Changelog
+
+### 1.2.0
+- **UI layout presets** — Project Builder detects the project archetype (dashboard, saas, crud, minimal) and injects a stable Tailwind design system block into every component prompt, so all generated files share consistent layout, spacing, colors, and button styles instead of each inventing their own
+- **Tailwind reliability rules** — generation prompts enforce valid Tailwind 3 utilities, forbid arbitrary values, prescribe the correct color scale and spacing ramp, and require `@tailwind` directives in the CSS entry file
+- **Multi-pass generation** — after each `.tsx`/`.jsx` file is generated, a validation pass checks for missing React hooks and router imports; critical files (App, main, router) always get a second LLM refine pass regardless; fixes are applied before writing to disk
+- **Cross-file import/export coherence** — after all files are written, the builder scans every generated file's exports (default, named, re-exports), then validates every relative import against the index; mismatches (named import of a default export, missing symbol, etc.) trigger a targeted LLM correction pass per affected file
+- **ANSI terminal rendering** — the integrated terminal and output pane now correctly render ANSI color codes, bold, dim, italic, and underline instead of displaying raw escape sequences; supports standard 16-color, 256-color (`38;5;n`), and true-color (`38;2;r;g;b`) modes; non-rendering codes (cursor movement, erase) are stripped silently
+- **Structured terminal output** — stdout/stderr lines are classified by content: errors (red), warnings (amber), success/ready messages (green), and stack frames (dimmed, indented); `word-break: break-word` replaces `break-all` so stack traces and identifiers wrap at word boundaries instead of mid-token
 
 ### 1.1.0
 - **TypeScript first-class support** — `.ts` files get syntax highlighting, autocomplete, and a Run button (via `tsx`); `.tsx` files get highlighting and inline AI toolbar; TypeScript workspace is auto-detected from the open file and injected into AI context

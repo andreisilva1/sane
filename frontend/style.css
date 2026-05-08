@@ -57,6 +57,24 @@
   --editor-font-sz: 13.5px;
   --editor-lh:      1.65;
 
+  /* ── ANSI terminal palette ── */
+  --ansi-black:      #3d4148;
+  --ansi-red:        #e06c75;
+  --ansi-green:      #98c379;
+  --ansi-yellow:     #e5c07b;
+  --ansi-blue:       #61afef;
+  --ansi-magenta:    #c678dd;
+  --ansi-cyan:       #56b6c2;
+  --ansi-white:      #abb2bf;
+  --ansi-br-black:   #5c6370;
+  --ansi-br-red:     #e06c75;
+  --ansi-br-green:   #98c379;
+  --ansi-br-yellow:  #e5c07b;
+  --ansi-br-blue:    #61afef;
+  --ansi-br-magenta: #c678dd;
+  --ansi-br-cyan:    #56b6c2;
+  --ansi-br-white:   #ffffff;
+
   /* ── Effects ── */
   --glass-bg:  rgba(18,21,30,0.92);
   --shadow-sm: 0 2px 8px rgba(0,0,0,0.35);
@@ -1179,11 +1197,18 @@ kbd {
   line-height: 1.55;
 }
 
-.term-line   { white-space: pre-wrap; word-break: break-all; }
-.term-cmd    { color: var(--accent); opacity: 0.8; }
+.term-line   { white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere; }
+.term-cmd    { color: var(--accent); opacity: 0.75; padding-top: 6px; margin-top: 2px; border-top: 1px solid var(--border); }
+.term-cmd:first-child { border-top: none; padding-top: 0; margin-top: 0; }
 .term-stdout { color: var(--text); }
 .term-stderr { color: #e8a87c; }
 .term-err    { color: var(--danger); }
+
+/* ── Structured line classification (shared by terminal + output pane) ── */
+.tl-error   { color: var(--ansi-red) !important; }
+.tl-warn    { color: var(--ansi-yellow) !important; }
+.tl-success { color: var(--ansi-green) !important; }
+.tl-stack   { color: var(--text-dim); font-size: 11.5px; padding-left: 12px; }
 
 .term-input-row, #term-input-row {
   display: flex;
@@ -1440,7 +1465,7 @@ kbd {
   line-height: 1.55;
 }
 
-.out-line   { white-space: pre-wrap; word-break: break-all; }
+.out-line   { white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere; }
 .out-stdout { color: var(--text); }
 .out-stderr { color: #e8a87c; }
 .out-error  { color: var(--danger); }
