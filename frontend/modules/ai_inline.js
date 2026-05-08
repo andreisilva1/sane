@@ -1,7 +1,7 @@
 (function () {
   const elEditor = document.getElementById('editor');
 
-  const CODE_EXTS = new Set(['.py','.js','.ts','.go','.java','.c','.cpp','.cs','.rb','.rs','.php','.swift','.kt']);
+  const CODE_EXTS = new Set(['.py','.js','.ts','.tsx','.go','.java','.c','.cpp','.cs','.rb','.rs','.php','.swift','.kt']);
   let active = false;
 
   // ── Toolbar element ───────────────────────────────────────

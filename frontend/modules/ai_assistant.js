@@ -218,8 +218,16 @@
   const frameworkProvider = {
     name: 'framework-signals', priority: 50,
     gather(intent, st) {
-      const sigs = window.sane._frameworkSignals;
-      return sigs?.length ? { label: 'Detected context', content: sigs.join(', ') } : null;
+      const sigs = window.sane._frameworkSignals ? [...window.sane._frameworkSignals] : [];
+      // Detect TypeScript workspace from open file extension or content
+      const ext = (st.filePath || '').split('.').pop().toLowerCase();
+      if (ext === 'ts' || ext === 'tsx') {
+        if (!sigs.some(s => /typescript/i.test(s))) sigs.push('TypeScript workspace');
+      }
+      if (ext === 'tsx' || (st.content || '').includes('from "react"') || (st.content || '').includes("from 'react'")) {
+        if (!sigs.some(s => /react/i.test(s))) sigs.push('React');
+      }
+      return sigs.length ? { label: 'Detected context', content: sigs.join(', ') } : null;
     },
   };
 

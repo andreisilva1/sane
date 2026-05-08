@@ -137,9 +137,11 @@
       `3. Include EVERY file needed: source files, components, styles, AND all config/manifest files. Never omit.\n` +
       `4. Dependency manifest (package.json / requirements.txt / go.mod / etc.) is MANDATORY. Its description must name every package the project will import.\n` +
       `5. Vite / React projects: index.html goes at the PROJECT ROOT (not inside public/). Entry file must be src/main.tsx. Reference it as <script type="module" src="/src/main.tsx">.\n` +
-      `6. Use current stable versions: React 18, Vite 5, TypeScript 5, react-router-dom 6, chart.js 4, @vitejs/plugin-react 4.\n` +
+      `6. Use current stable versions: React 18, Vite 5, TypeScript 5, react-router-dom 6, chart.js 4, @vitejs/plugin-react 4, Express 4, Fastify 4.\n` +
       `7. Do NOT include a "content" field — file paths and descriptions only.\n` +
-      `8. Generate package.json as the LAST step (after all source files), so all dependencies are known.`
+      `8. Generate package.json as the LAST step (after all source files), so all dependencies are known.\n` +
+      `9. TypeScript projects must include tsconfig.json. Node+TS projects must include tsconfig.json and package.json with ts-node or tsx in devDependencies.\n` +
+      `10. Use .tsx extension for React component files and .ts for non-JSX TypeScript files.`
     );
   }
 
@@ -149,6 +151,7 @@
     const s = (stack || '').toLowerCase();
     const isReact = s.includes('react') || f.endsWith('.tsx') || f.endsWith('.jsx');
     const isVite  = s.includes('vite');
+    const isTS    = s.includes('typescript') || s.includes('ts') || f.endsWith('.ts') || f.endsWith('.tsx');
     const hints   = [];
 
     if (f === 'package.json') {
@@ -198,6 +201,34 @@
 
     if (f.endsWith('requirements.txt')) {
       hints.push('- Pin exact versions. Include every package imported anywhere in the project.');
+    }
+
+    if (f === 'tsconfig.json') {
+      hints.push(
+        '- Use "strict": true.',
+        '- For Vite/React: target "ESNext", module "ESNext", moduleResolution "Bundler", jsx "react-jsx".',
+        '- For Node: target "ES2022", module "CommonJS" or "NodeNext", include ["src/**/*"].',
+        '- Always set "outDir": "dist" and "rootDir": "src" for Node projects.',
+        '- Do NOT include "paths" aliases unless explicitly needed.',
+      );
+    }
+
+    if (isTS && !isReact && (f.endsWith('.ts'))) {
+      hints.push(
+        '- Use explicit TypeScript types for all function parameters and return values.',
+        '- Export types and interfaces alongside the implementation.',
+        '- Use ES module syntax (import/export) unless the project is Node CommonJS.',
+      );
+    }
+
+    if (f === 'src/index.ts' || f === 'index.ts' || f === 'src/server.ts' || f === 'server.ts') {
+      if (!isReact) {
+        hints.push(
+          '- This is the entry point — include all necessary imports.',
+          '- For Express/Fastify: create the app, register routes, and call app.listen().',
+          '- Export the app instance if the project has tests.',
+        );
+      }
     }
 
     return hints.length ? `IMPORTANT RULES FOR THIS FILE:\n${hints.join('\n')}\n\n` : '';
@@ -412,7 +443,7 @@
       `✓ ${total} file${total !== 1 ? 's' : ''} created in "${folderName}".`
     );
 
-    const firstCode = plan.steps.find(s => /\.(py|js|ts|go|rs|rb|java|cpp|c|html)$/.test(s.file));
+    const firstCode = plan.steps.find(s => /\.(py|js|ts|tsx|go|rs|rb|java|cpp|c|html)$/.test(s.file));
     if (firstCode) {
       const btn = document.createElement('button');
       btn.className = 'ai-apply-btn';
