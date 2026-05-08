@@ -1,7 +1,7 @@
 {
   "name": "sane",
   "private": true,
-  "version": "1.1.0",
+  "version": "1.2.0",
   "scripts": {
     "dev": "tauri dev",
     "build:backend": "cd backend && go build -ldflags \"-H windowsgui -s -w\" -o ../src-tauri/binaries/sane-backend-x86_64-pc-windows-msvc.exe .",

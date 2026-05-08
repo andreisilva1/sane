@@ -184,6 +184,33 @@
     } catch (err) { setStatus('Error: ' + err.message, 'err'); }
   }
 
+  // ── Multi-delete (shared by keydown and context menu) ────
+  async function doMultiDelete(allSelected) {
+    const names = allSelected.map(el => nameOf(el.dataset.path)).join('\n');
+    if (!confirm(`Delete ${allSelected.length} items?\n${names}`)) return;
+    const paths   = allSelected.map(el => el.dataset.path);
+    const results = await Promise.allSettled(
+      paths.map(p => apiFetch('/file?path=' + encodeURIComponent(p), { method: 'DELETE' }))
+    );
+    const failed = results.filter(r => r.status === 'rejected');
+    // Clear editor if an open file was among the deleted
+    if (paths.some(p => state.filePath === p || state.filePath?.startsWith(p + sep(p)))) {
+      state.filePath = null; state.content = ''; state.dirty = false;
+      document.getElementById('editor').value = '';
+      document.getElementById('editor').disabled = true;
+      document.getElementById('current-file').textContent = '';
+      document.getElementById('header-sep').classList.add('hidden');
+      document.getElementById('btn-save').disabled = true;
+      if (window.sane?.onFileOpen) window.sane.onFileOpen(null);
+    }
+    await refresh();
+    if (failed.length) {
+      setStatus(`Deleted ${paths.length - failed.length}/${paths.length} — ${failed[0].reason?.message || 'error'}`, 'err');
+    } else {
+      setStatus(`Deleted ${paths.length} items`, 'ok');
+    }
+  }
+
   // ── Event wiring ──────────────────────────────────────────
   document.getElementById('sidebar').addEventListener('contextmenu', (e) => {
     const item  = e.target.closest('.tree-item');
@@ -200,7 +227,16 @@
   elNewFile.addEventListener('click',   () => { hideMenu(); doNewFile();   });
   elNewFolder.addEventListener('click', () => { hideMenu(); doNewFolder(); });
   elRename.addEventListener('click',    () => { hideMenu(); doRename();    });
-  elDelete.addEventListener('click',    () => { hideMenu(); doDelete();    });
+  elDelete.addEventListener('click',    () => {
+    hideMenu();
+    const allSelected = [...document.querySelectorAll('.tree-item.selected')];
+    // If the right-clicked item is part of a multi-selection, delete all selected
+    if (allSelected.length > 1 && ctxPath && allSelected.some(el => el.dataset.path === ctxPath)) {
+      doMultiDelete(allSelected);
+    } else {
+      doDelete();
+    }
+  });
 
   window.sane = window.sane || {};
   window.sane.getCtxPath  = () => ctxPath;
@@ -225,24 +261,6 @@
       return;
     }
 
-    // Multi-delete
-    const names = allSelected.map(el => nameOf(el.dataset.path)).join(', ');
-    if (!confirm(`Delete ${allSelected.length} items?\n${names}`)) return;
-    const paths = allSelected.map(el => el.dataset.path);
-    Promise.all(paths.map(p =>
-      apiFetch('/file?path=' + encodeURIComponent(p), { method: 'DELETE' }).catch(() => {})
-    )).then(() => {
-      if (paths.some(p => state.filePath === p || state.filePath?.startsWith(p + sep(p)))) {
-        state.filePath = null; state.content = ''; state.dirty = false;
-        document.getElementById('editor').value = '';
-        document.getElementById('editor').disabled = true;
-        document.getElementById('current-file').textContent = '';
-        document.getElementById('header-sep').classList.add('hidden');
-        document.getElementById('btn-save').disabled = true;
-        if (window.sane?.onFileOpen) window.sane.onFileOpen(null);
-      }
-      refresh();
-      setStatus(`Deleted ${paths.length} items`, 'ok');
-    });
+    doMultiDelete(allSelected);
   });
 })();

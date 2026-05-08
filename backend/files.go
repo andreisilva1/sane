@@ -90,6 +90,15 @@ func serveFile(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	case http.MethodDelete:
+		// On Windows, files inside node_modules (e.g. esbuild.exe) can be
+		// marked read-only, causing RemoveAll to fail with "access denied".
+		// Stripping the read-only bit on every entry first fixes this.
+		_ = filepath.Walk(path, func(p string, info os.FileInfo, err error) error {
+			if err != nil {
+				return nil
+			}
+			return os.Chmod(p, 0777)
+		})
 		if err := os.RemoveAll(path); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
