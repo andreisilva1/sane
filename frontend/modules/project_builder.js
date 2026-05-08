@@ -9,6 +9,308 @@
   let abortCtrl = null;
   let activeCard = null;
 
+  // ── Curated dependency registry ───────────────────────────
+  // Authoritative versions — the ONLY allowed source for generated versions.
+  const PINNED = {
+    // React
+    'react':                       '18.2.0',
+    'react-dom':                   '18.2.0',
+    'react-router-dom':            '6.22.0',
+    '@types/react':                '18.2.79',
+    '@types/react-dom':            '18.2.25',
+    // Vite
+    'vite':                        '5.2.8',
+    '@vitejs/plugin-react':        '4.2.1',
+    // TypeScript
+    'typescript':                  '5.4.5',
+    '@types/node':                 '20.12.7',
+    'tsx':                         '4.7.2',
+    'ts-node':                     '10.9.2',
+    // Express
+    'express':                     '4.19.2',
+    '@types/express':              '4.17.21',
+    'cors':                        '2.8.5',
+    '@types/cors':                 '2.8.17',
+    // Fastify
+    'fastify':                     '4.26.2',
+    '@fastify/cors':               '9.0.1',
+    // Styling
+    'tailwindcss':                 '3.4.3',
+    'autoprefixer':                '10.4.19',
+    'postcss':                     '8.4.38',
+    // Charts / UI
+    'chart.js':                    '4.4.2',
+    'react-chartjs-2':             '5.2.0',
+    'lucide-react':                '0.372.0',
+    // Utilities
+    'axios':                       '1.6.8',
+    'zod':                         '3.22.4',
+    'dotenv':                      '16.4.5',
+    'uuid':                        '9.0.1',
+    '@types/uuid':                 '9.0.8',
+    'date-fns':                    '3.6.0',
+    // Testing
+    'vitest':                      '1.5.0',
+    '@testing-library/react':      '15.0.2',
+    '@testing-library/jest-dom':   '6.4.2',
+    // State / misc
+    'zustand':                     '4.5.2',
+    'clsx':                        '2.1.1',
+    'nanoid':                      '5.0.7',
+  };
+
+  // Packages that ship native TypeScript types — no @types/* needed.
+  const NATIVE_TYPES = new Set([
+    'axios', 'zod', 'vite', '@vitejs/plugin-react', 'tailwindcss',
+    'fastify', '@fastify/cors', 'date-fns', 'lucide-react',
+    'react-chartjs-2', 'vitest', 'zustand', 'jotai', 'swr',
+    'react-hook-form', '@tanstack/react-query', 'framer-motion',
+    'dayjs', 'clsx', 'nanoid', 'immer', 'chart.js',
+  ]);
+
+  // Packages that do not exist or break modern stacks — silently removed.
+  const BANNED = new Set([
+    '@types/chart.js',          // chart.js ships types natively
+    '@types/axios',             // axios ships types natively
+    '@types/zod',               // doesn't exist
+    '@types/vite',              // doesn't exist
+    '@types/tailwindcss',       // doesn't exist
+    '@types/lucide-react',      // doesn't exist
+    'react-scripts',            // CRA — not Vite
+    'create-react-app',
+    'node-fetch',               // Node 18+ has native fetch
+    '@types/node-fetch',
+    '@vitejs/plugin-react-swc', // only if explicitly requested
+    'babel-preset-react-app',
+  ]);
+
+  // npm scopes known to publish real, usable packages.
+  // Packages from unknown scopes are treated as LOW confidence.
+  const SAFE_SCOPES = new Set([
+    'types', 'vitejs', 'testing-library', 'tanstack', 'fastify',
+    'prisma', 'trpc', 'radix-ui', 'hookform', 'mui', 'emotion',
+    'reduxjs', 'storybook', 'nestjs', 'angular', 'babel',
+    'jest', 'rollup', 'eslint', 'floating-ui', 'headlessui',
+    'remix-run', 'sveltejs', 'nuxt',
+  ]);
+
+  // Package names that signal hallucination — generic/internal names
+  // that real npm packages almost never use at the top level.
+  const SUSPICIOUS_GENERICS = new Set([
+    'core', 'runtime', 'internal', 'shared', 'utils', 'helpers',
+    'common', 'toolkit', 'platform', 'engine', 'loader', 'compiler',
+  ]);
+
+  // ── Confidence classification ─────────────────────────────
+  // HIGH  → known package with pinned version   → keep silently
+  // MEDIUM → plausible name, unverified         → keep, note if many
+  // LOW   → suspicious naming or unknown scope  → remove + warn
+  // BANNED → known-bad or redundant             → remove silently
+  function pkgConfidence(name) {
+    if (BANNED.has(name)) return 'BANNED';
+
+    if (name.startsWith('@types/')) {
+      const base = name.slice(7);
+      if (NATIVE_TYPES.has(base)) return 'BANNED'; // redundant typing
+      return 'HIGH'; // legitimate @types
+    }
+
+    if (PINNED[name]) return 'HIGH';
+
+    if (name.startsWith('@')) {
+      const scope   = name.slice(1).split('/')[0];
+      const pkgPart = name.split('/')[1] || '';
+      if (!SAFE_SCOPES.has(scope)) return 'LOW';          // unknown scope
+      if (SUSPICIOUS_GENERICS.has(pkgPart)) return 'LOW'; // @scope/core etc.
+      return 'MEDIUM';
+    }
+
+    if (SUSPICIOUS_GENERICS.has(name)) return 'LOW';
+    return 'MEDIUM';
+  }
+
+  // Version strings that indicate the LLM guessed rather than knew.
+  function isReliableVersion(ver) {
+    if (typeof ver !== 'string') return false;
+    const v = ver.trim().toLowerCase();
+    if (['*', 'latest', 'next', 'canary', 'beta', 'alpha', 'rc'].includes(v)) return false;
+    return /^[\^~]?\d+\.\d+/.test(v);
+  }
+
+  // ── Stack presets ─────────────────────────────────────────
+  // Each preset defines the guaranteed baseline for that ecosystem.
+  // The LLM fills in project-specific additions on top of these.
+  const PRESETS = {
+    'react-vite-ts': {
+      deps:    { 'react': true, 'react-dom': true, 'react-router-dom': true },
+      devDeps: { 'vite': true, '@vitejs/plugin-react': true, 'typescript': true,
+                 '@types/react': true, '@types/react-dom': true },
+      scripts: { dev: 'vite', build: 'tsc && vite build', preview: 'vite preview' },
+      esm: true,
+    },
+    'react-vite-js': {
+      deps:    { 'react': true, 'react-dom': true },
+      devDeps: { 'vite': true, '@vitejs/plugin-react': true },
+      scripts: { dev: 'vite', build: 'vite build', preview: 'vite preview' },
+      esm: true,
+    },
+    'node-express-ts': {
+      deps:    { 'express': true, 'cors': true, 'dotenv': true },
+      devDeps: { 'typescript': true, '@types/node': true, '@types/express': true,
+                 '@types/cors': true, 'tsx': true },
+      scripts: { dev: 'tsx watch src/index.ts', build: 'tsc', start: 'node dist/index.js' },
+      esm: false,
+    },
+    'node-ts': {
+      deps:    {},
+      devDeps: { 'typescript': true, '@types/node': true, 'tsx': true },
+      scripts: { dev: 'tsx watch src/index.ts', build: 'tsc', start: 'node dist/index.js' },
+      esm: false,
+    },
+    'vanilla-vite': {
+      deps:    {},
+      devDeps: { 'vite': true },
+      scripts: { dev: 'vite', build: 'vite build', preview: 'vite preview' },
+      esm: true,
+    },
+    'go-rest':  null, // Go uses go.mod — no npm presets
+    'fastapi':  null, // Python uses requirements.txt — no npm presets
+  };
+
+  function detectPreset(stack, steps) {
+    const s = (stack || '').toLowerCase();
+    const files = (steps || []).map(st => st.file.toLowerCase());
+    const hasTsx = files.some(f => f.endsWith('.tsx'));
+    const hasTs  = files.some(f => f.endsWith('.ts'));
+    const isTS   = s.includes('typescript') || hasTsx || hasTs;
+
+    if (s.includes('react')) return isTS ? 'react-vite-ts' : 'react-vite-js';
+    if (s.includes('express') || s.includes('fastify')) return 'node-express-ts';
+    if (s.includes('node') && isTS) return 'node-ts';
+    if (s.includes('vite')) return 'vanilla-vite';
+    if (/\bgo\b|golang/.test(s)) return 'go-rest';
+    if (/python|flask|django|fastapi/.test(s)) return 'fastapi';
+    return null;
+  }
+
+  // ── Python version table ──────────────────────────────────
+  const PINNED_PY = {
+    'fastapi':           '0.110.0',
+    'uvicorn':           '0.29.0',
+    'pydantic':          '2.7.0',
+    'sqlalchemy':        '2.0.29',
+    'alembic':           '1.13.1',
+    'python-dotenv':     '1.0.1',
+    'httpx':             '0.27.0',
+    'pytest':            '8.1.1',
+    'flask':             '3.0.3',
+    'django':            '5.0.4',
+    'requests':          '2.31.0',
+    'pydantic-settings': '2.2.1',
+  };
+
+  function sanitizeRequirementsTxt(text) {
+    const lines = text.split('\n');
+    const seen  = new Set();
+    const out   = [];
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) { out.push(line); continue; }
+      // Extract package name (before any version specifier)
+      const name = trimmed.split(/[>=<!~\s]/)[0].toLowerCase();
+      if (seen.has(name)) continue; // deduplicate
+      seen.add(name);
+      // Correct version if we know it and the line has a specifier
+      if (PINNED_PY[name] && /[>=<]/.test(trimmed)) {
+        out.push(`${name}>=${PINNED_PY[name]}`);
+      } else {
+        out.push(line);
+      }
+    }
+    return out.join('\n');
+  }
+
+  // ── Post-generation package.json sanitizer ────────────────
+  // Returns { json: string, warnings: string[] }.
+  // Applies confidence-based filtering, version correction, preset
+  // baseline injection, ESM field, and duplicate detection.
+  function sanitizePackageJson(text, presetKey) {
+    let pkg;
+    try { pkg = JSON.parse(text); } catch { return { json: text, warnings: [] }; }
+
+    const warnings    = [];
+    const preset      = PRESETS[presetKey] || null;
+    const lowRemoved  = [];
+
+    // 1. Inject preset baseline — guaranteed minimum for the ecosystem
+    if (preset) {
+      pkg.dependencies    = pkg.dependencies    || {};
+      pkg.devDependencies = pkg.devDependencies || {};
+      for (const name of Object.keys(preset.deps))
+        if (!pkg.dependencies[name] && !pkg.devDependencies[name])
+          pkg.dependencies[name] = '^' + (PINNED[name] || '');
+      for (const name of Object.keys(preset.devDeps))
+        if (!pkg.devDependencies[name])
+          pkg.devDependencies[name] = '^' + (PINNED[name] || '');
+      pkg.scripts = { ...preset.scripts, ...(pkg.scripts || {}) };
+
+      // ESM field — required for Vite and modern bundler stacks
+      if (preset.esm && !pkg['type']) {
+        pkg['type'] = 'module';
+        warnings.push('"type":"module" added (Vite/ESM project)');
+      }
+    }
+
+    // 2. Process each dep section — confidence filter + version correction
+    for (const section of ['dependencies', 'devDependencies']) {
+      if (!pkg[section]) continue;
+      for (const name of Object.keys(pkg[section])) {
+        const ver  = pkg[section][name];
+        const conf = pkgConfidence(name);
+
+        // BANNED or redundant @types → silent removal
+        if (conf === 'BANNED') { delete pkg[section][name]; continue; }
+
+        // @types in wrong section → move silently
+        if (section === 'dependencies' && name.startsWith('@types/')) {
+          pkg.devDependencies = pkg.devDependencies || {};
+          if (!pkg.devDependencies[name]) pkg.devDependencies[name] = ver;
+          delete pkg[section][name];
+          continue;
+        }
+
+        // LOW confidence → remove + collect for warning
+        if (conf === 'LOW') { delete pkg[section][name]; lowRemoved.push(name); continue; }
+
+        // Unreliable version tag (latest / next / canary etc.)
+        if (!isReliableVersion(ver)) {
+          pkg[section][name] = PINNED[name] ? '^' + PINNED[name] : '*';
+          if (!PINNED[name]) warnings.push(`"${name}": unreliable version "${ver}" → set to "*"`);
+          continue;
+        }
+
+        // Correct to pinned version for known packages
+        if (PINNED[name]) pkg[section][name] = '^' + PINNED[name];
+      }
+    }
+
+    if (lowRemoved.length)
+      warnings.push('Removed likely hallucinated packages: ' + lowRemoved.join(', '));
+
+    // 3. Deduplicate — if a package appears in both sections, devDeps wins
+    if (pkg.dependencies && pkg.devDependencies) {
+      for (const name of Object.keys(pkg.dependencies)) {
+        if (pkg.devDependencies[name]) delete pkg.dependencies[name];
+      }
+    }
+
+    // 4. Remove empty sections
+    if (pkg.dependencies    && !Object.keys(pkg.dependencies).length)    delete pkg.dependencies;
+    if (pkg.devDependencies && !Object.keys(pkg.devDependencies).length) delete pkg.devDependencies;
+
+    return { json: JSON.stringify(pkg, null, 2), warnings };
+  }
+
   // ── Persistence (localStorage) ────────────────────────────
   const PB_PLAN_KEY     = 'sane_pb_plan';
   const PB_PROGRESS_KEY = 'sane_pb_progress';
@@ -155,13 +457,25 @@
     const hints   = [];
 
     if (f === 'package.json') {
+      const preset    = PRESETS[detectPreset(stack, plan?.steps)];
+      const pinnedStr = Object.entries(PINNED).map(([k, v]) => `${k}@${v}`).join(', ');
       hints.push(
-        '- List EVERY npm package imported anywhere in this project as a dependency.',
-        '- Current versions: react@18.2, react-dom@18.2, react-router-dom@6.8, vite@5.0, @vitejs/plugin-react@4.0, typescript@5.0, chart.js@4.0.',
-        '- Scripts must include: "dev":"vite", "build":"tsc && vite build", "preview":"vite preview".',
+        '- List EVERY npm package imported in this project. Do NOT invent versions — use ONLY the versions below.',
+        `- AUTHORITATIVE VERSIONS (use these exactly): ${pinnedStr}.`,
+        '- For any package not listed above, omit the version specifier and write "*".',
+        '- Do NOT include @types/* for packages that bundle their own types: ' + [...NATIVE_TYPES].join(', ') + '.',
+        '- Do NOT include these packages (they cause breakage): ' + [...BANNED].join(', ') + '.',
+        '- All @types/* packages belong in devDependencies, never in dependencies.',
         '- Do NOT set "main" for a Vite SPA.',
-        '- devDependencies: vite, @vitejs/plugin-react, typescript, and all @types/* packages needed.',
       );
+      if (preset) {
+        const baseDeps    = Object.keys(preset.deps).map(n => `${n}@${PINNED[n] || '*'}`).join(', ');
+        const baseDevDeps = Object.keys(preset.devDeps).map(n => `${n}@${PINNED[n] || '*'}`).join(', ');
+        if (baseDeps)    hints.push(`- REQUIRED dependencies (always include): ${baseDeps}.`);
+        if (baseDevDeps) hints.push(`- REQUIRED devDependencies (always include): ${baseDevDeps}.`);
+        const scripts = Object.entries(preset.scripts).map(([k, v]) => `"${k}":"${v}"`).join(', ');
+        hints.push(`- Scripts must include: ${scripts}.`);
+      }
     }
 
     if (f === 'index.html' && (isVite || isReact)) {
@@ -195,12 +509,29 @@
       hints.push(
         '- Use ReactDOM.createRoot(document.getElementById("root")!).render(...).',
         '- Wrap the app in <React.StrictMode>.',
+        '- If the project uses react-router-dom, wrap <App /> in <BrowserRouter> HERE — this is the ONLY place in the entire project where <BrowserRouter> should appear.',
         '- Import global CSS here if a styles file exists in the project.',
+      );
+    }
+
+    if (isReact && (f.endsWith('.tsx') || f.endsWith('.jsx')) && f !== 'src/main.tsx' && f !== 'src/index.tsx') {
+      hints.push(
+        '- NEVER wrap this component in <BrowserRouter> or any Router — routing is set up in main.tsx only.',
+        '- Use <Routes> and <Route> directly inside this component if it is the top-level routing component.',
       );
     }
 
     if (f.endsWith('requirements.txt')) {
       hints.push('- Pin exact versions. Include every package imported anywhere in the project.');
+    }
+
+    if (f === 'go.mod') {
+      hints.push(
+        '- First line must be: module <module-path> (use the folder name if unknown, e.g. "module myapp").',
+        '- Second line must be: go 1.22',
+        '- Only list packages that are actually imported — do NOT include the Go standard library.',
+        '- Common packages: github.com/gin-gonic/gin v1.9.1, github.com/gorilla/mux v1.8.1, github.com/joho/godotenv v1.5.1.',
+      );
     }
 
     if (f === 'tsconfig.json') {
@@ -411,15 +742,31 @@
       progressMsg.innerHTML = `<span class="pb-spinner">⟳</span> ${escHtml(label)}`;
 
       try {
-        const raw     = await streamAsk(buildFilePrompt(step));
-        const content = stripFences(raw);
+        const raw   = await streamAsk(buildFilePrompt(step));
+        let content = stripFences(raw);
+
+        // Post-process manifest files to correct hallucinated versions/packages
+        const fname    = step.file.split(/[/\\]/).pop().toLowerCase();
+        let sanitizeWarnings = [];
+        if (fname === 'package.json') {
+          const result = sanitizePackageJson(content, detectPreset(plan.stack, plan.steps));
+          content          = result.json;
+          sanitizeWarnings = result.warnings;
+        } else if (fname === 'requirements.txt') {
+          content = sanitizeRequirementsTxt(content);
+        }
 
         await apiFetch('/file?path=' + encodeURIComponent(filePath), {
           method:  'POST',
           headers: { 'Content-Type': 'application/json' },
           body:    JSON.stringify({ content }),
         });
-        progressMsg.textContent = `✓ ${label}`;
+        if (sanitizeWarnings.length) {
+          progressMsg.innerHTML =
+            `✓ ${escHtml(label)}<span class="pb-sanitize-note"> · ${escHtml(sanitizeWarnings.join(' · '))}</span>`;
+        } else {
+          progressMsg.textContent = `✓ ${label}`;
+        }
         saveProgress(i + 1);
       } catch (err) {
         if (err.name === 'AbortError') {

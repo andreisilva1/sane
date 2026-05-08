@@ -4,12 +4,12 @@
 
 # Sane
 
-**A local-first code editor for Python, JavaScript, Go, and Java.**  
+**A local-first code editor for Python, JavaScript, TypeScript, Go, and Java.**  
 Built-in AI. Zero cloud. Keyboard-first.
 
 [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows-0078D4?style=flat-square&logo=windows&logoColor=white)](https://github.com/andreisilva1/sane/releases/latest)
-[![Version](https://img.shields.io/badge/version-0.4.0-22863a?style=flat-square)](https://github.com/andreisilva1/sane/releases/latest)
+[![Version](https://img.shields.io/badge/version-1.1.0-22863a?style=flat-square)](https://github.com/andreisilva1/sane/releases/latest)
 
 [![Tauri](https://img.shields.io/badge/Tauri-24C8D8?style=flat-square&logo=tauri&logoColor=white)](https://tauri.app)
 [![Rust](https://img.shields.io/badge/Rust-000000?style=flat-square&logo=rust&logoColor=white)](https://www.rust-lang.org)
@@ -21,26 +21,33 @@ Built-in AI. Zero cloud. Keyboard-first.
 
 ---
 
-## In action
+## Features at a glance
 
-### Project Builder
-Generate a full multi-file project from a single description — with per-file progress, a run commands card, and resume support if interrupted.
+### Editor
+- Syntax highlighting for Python, JavaScript, TypeScript, TSX, Go, and Java
+- Smart indent, auto-pairs, block indentation, bracket matching
+- Go to Definition, Find References, Rename Symbol
+- Extract Function, Inline Variable, Remove Dead Code
+- Drag-and-drop file and folder management
+- Classic and Friendly UI modes (Friendly adds a VSCode-style toolbar)
 
-<img src="gifs/project_builder.gif" alt="Project Builder" width="100%" />
+### AI (fully local via Ollama)
+- Chat panel with streaming responses, markdown rendering, and persistent history
+- **Project Builder** — describe a project in any language; intent is auto-detected; generates a complete multi-file scaffold with curated dependency presets and resume support
+- **Self-Healing** — detects common runtime errors, suggests or applies fixes automatically
+- **AI Refactor** — diff preview and approval before applying changes
+- **Inline AI toolbar** — Explain / Improve / Refactor on selected code
+- Project-aware context: file tree and key files automatically included in every message
+- Your code never leaves your machine
 
----
+### Dev Toolkit
+- HTTP Client · .env Manager · SQLite Viewer · Dev Scheduler
+- JSON Viewer · Git status/diff/commit · Activity Log
 
-### Self-Healing
-Detects common runtime errors and suggests or applies fixes automatically — no manual debugging needed.
-
-<img src="gifs/auto_fix.gif" alt="Self-Healing" width="100%" />
-
----
-
-### AI Chat
-Ask the AI to convert, refactor, or explain code. The same chat works across files and languages.
-
-<img src="gifs/ai_integration.gif" alt="AI chat — converting Python to Java" width="100%" />
+### Execution
+- Run Python, JavaScript, TypeScript, Go, and Java with `Ctrl+Enter`
+- **Execution Timeline** — step through Python code line by line, inspect variable state at each step
+- **Run Insight** — AI summary of what your code did after each run
 
 ---
 
@@ -49,37 +56,6 @@ Ask the AI to convert, refactor, or explain code. The same chat works across fil
 Most editors have become sprawling platforms. AI integrations usually mean cloud APIs, accounts, and data leaving your machine. Setup friction is high, and the tools often get in the way of the actual work.
 
 Sane is the opposite: a focused editor that runs your code, understands it, and helps you build projects — without setup, without subscriptions, and without sending anything to the cloud.
-
----
-
-## Features
-
-### Editor
-- Syntax highlighting for Python, JavaScript, Go, and Java — each in its own language module
-- Smart indent, auto-pairs, and block indentation
-- Go to Definition, Find References, Rename Symbol
-- Extract Function, Inline Variable, Remove Dead Code
-- Drag-and-drop file and folder management
-- Classic and Friendly UI modes — Friendly adds a VSCode-style menu toolbar
-
-### Execution
-- Run Python, JavaScript, Go, and Java with a single keystroke (`Ctrl+Enter`)
-- Zero configuration — Python virtualenvs detected and selectable automatically, others use system PATH
-- Java uses single-file execution mode (Java 11+) — no manual `javac` step
-- Integrated terminal with multiple sessions
-- **Execution Timeline** — step through Python code line by line, inspect variable state at each step
-- **Run Insight** — automatic one-sentence AI summary of what your code did after each run
-
-### Built-in AI (fully local)
-- Powered by Ollama — installed automatically, no accounts, no API keys
-- AI chat panel with streaming responses and persistent chat history
-- **Project-aware AI** — every message automatically includes your project's file tree and key file contents (`go.mod`, `package.json`, `README`, entry points, configs); the model uses what's relevant and ignores the rest
-- **Project Builder** — describe a project, generate real multi-file scaffolding with per-file progress, resume from interruption
-- AI Refactor with diff preview and approval step
-- **Self-Healing** — detects common runtime errors, suggests or applies fixes automatically
-- **Intent Detection** — reads your code and surfaces relevant actions contextually
-- Quick Fix and AI Fix on editor errors
-- Your code never leaves your machine
 
 ### Dev Toolkit
 - **HTTP Client** — send any HTTP request directly from the editor, JSON auto-formatted (`Ctrl+Shift+H`)
@@ -106,6 +82,18 @@ Sane is the opposite: a focused editor that runs your code, understands it, and 
 
 ---
 
+## About this project
+
+Sane is a personal project — started and maintained by one person, built with heavy AI assistance, and still finding its shape.
+
+It works, it ships, and there is plenty of room to grow.
+
+If you find a bug, have a feature idea, or just want to improve something: **you are very welcome here.** Open an issue, send a PR, or fork it and take it somewhere new. No contribution is too small.
+
+The goal was never a finished product — it was a tool worth using, built openly, one feature at a time.
+
+---
+
 ## Philosophy
 
 > Simple tools for focused work.
@@ -124,8 +112,8 @@ Sane is the opposite: a focused editor that runs your code, understands it, and 
 
 <div align="center">
 
-[![Download Installer](https://img.shields.io/badge/Download%20Installer-.exe-0078D4?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/andreisilva1/sane/releases/latest/download/Sane_0.4.0_x64-setup.exe)
-[![Download MSI](https://img.shields.io/badge/Download%20MSI-.msi-6E40C9?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/andreisilva1/sane/releases/latest/download/Sane_0.4.0_x64_en-US.msi)
+[![Download Installer](https://img.shields.io/badge/Download%20Installer-.exe-0078D4?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/andreisilva1/sane/releases/latest/download/Sane_1.1.0_x64-setup.exe)
+[![Download MSI](https://img.shields.io/badge/Download%20MSI-.msi-6E40C9?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/andreisilva1/sane/releases/latest/download/Sane_1.1.0_x64_en-US.msi)
 
 </div>
 
@@ -172,7 +160,7 @@ Open the installed app or run `sane.exe` directly. The last opened folder is res
 `Ctrl+P` to quick-open any file, or browse the sidebar. In Friendly mode, use the **File** menu.
 
 ### Running code
-Open a `.py`, `.js`, `.go`, or `.java` file and press `Ctrl+Enter`. Output streams in real time in the integrated panel. For Python files with `input()`, an inline stdin field appears automatically.
+Open a `.py`, `.js`, `.ts`, `.go`, or `.java` file and press `Ctrl+Enter`. Output streams in real time in the integrated panel. For Python files with `input()`, an inline stdin field appears automatically.
 
 ### Using AI
 1. Open the AI panel (`Ctrl+Shift+A`)
@@ -195,7 +183,6 @@ Switch between **Classic** (minimal, keyboard-first) and **Friendly** (VSCode-st
 | `Ctrl+Shift+F` | Search in files |
 | `` Ctrl+` `` | Toggle terminal |
 | `Ctrl+Shift+A` | Toggle AI panel |
-| `Ctrl+Shift+B` | Project Builder |
 | `Ctrl+Shift+V` | HTML preview |
 | `Ctrl+Shift+G` | Git: Commit |
 | `Ctrl+Shift+H` | HTTP Client |
@@ -214,6 +201,8 @@ Full reference: [snippets.md](snippets.md)
 |---|---|---|---|---|---|
 | Python | ✓ | ✓ | ✓ | ✓ | Virtualenv auto-detection and selection |
 | JavaScript | ✓ | — | ✓ | ✓ | Requires Node.js |
+| TypeScript | ✓ | — | ✓ | ✓ | Runs via `tsx` (Node.js required) |
+| TSX | — | — | ✓ | ✓ | Bundled via Vite; inline AI toolbar supported |
 | Go | ✓ | — | ✓ | ✓ | Requires Go toolchain |
 | Java | ✓ | — | ✓ | ✓ | Java 11+, single-file mode |
 | HTML / CSS | preview | — | — | — | Live preview via `Ctrl+Shift+V` |
@@ -237,6 +226,19 @@ Performance depends on your hardware. A modern machine with 16 GB RAM handles th
 ---
 
 ## Changelog
+
+### 1.1.0
+- **TypeScript first-class support** — `.ts` files get syntax highlighting, autocomplete, and a Run button (via `tsx`); `.tsx` files get highlighting and inline AI toolbar; TypeScript workspace is auto-detected from the open file and injected into AI context
+- **Curated dependency presets** — Project Builder now uses validated stack presets (react-vite-ts, node-express-ts, node-ts, vanilla-vite) with pinned known-good versions for 30+ packages instead of dynamically generating dependency combinations
+- **Post-generation sanitizer** — generated `package.json` is automatically corrected: hallucinated versions replaced with pinned ones, banned packages removed, `@types/*` for packages that ship native types stripped, misplaced entries moved to the right section
+- **requirements.txt sanitizer** — Python dependency files are deduplicated and versions corrected against a curated Python package table
+- **Dotfiles visible** — `.env`, `.gitignore`, `.eslintrc`, and other dotfiles now appear in the file tree (previously hidden by the backend)
+
+### 1.0.0
+- **Unified AI pipeline** — intent classification, context assembly, and streaming execution are now a single cohesive system; the "Project Builder mode" toggle is removed — intent is inferred automatically from your message in any language
+- **Hybrid intent classifier** — regex fast path (EN + PT) with LLM fallback for ambiguous messages; handles Portuguese project requests natively without translation
+- **Progressive markdown rendering** — AI responses render live as markdown during streaming (bold, code blocks, headers, lists) with 80ms throttle; stored as raw markdown for history persistence
+- **Project Builder reliability** — improved plan prompts, per-file stack hints, manifest auto-inject when the model omits it, manifests always generated last so all dependencies are known
 
 ### 0.4.0
 - **Git integration** — minimal, invisible Git support: file status badges (M/A/U) in the file tree update automatically; right-click any file → View Diff for a color-coded diff overlay; `Ctrl+Shift+G` opens a commit modal that stages and commits all changes in one step; hidden automatically for non-Git projects
@@ -296,8 +298,10 @@ If you read the source and see something worth improving, a PR is welcome.
 - [x] Go and Java language support
 - [x] Project-wide AI context
 - [x] Git integration — file status in tree, quick diff, simple commit flow
+- [x] TypeScript and TSX language support
+- [x] Curated Project Builder with reliable dependency presets
 - [ ] macOS and Linux builds
-- [ ] TypeScript, PHP, and Ruby language support
+- [ ] PHP and Ruby language support
 - [ ] Editor enhancements — multi-cursor, split view, minimap, custom snippets, find & replace with regex
 
 ---

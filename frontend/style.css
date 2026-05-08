@@ -3043,6 +3043,12 @@ kbd {
   display: inline-block;
   animation: pb-spin 1s linear infinite;
 }
+.pb-sanitize-note {
+  color: var(--text-dim);
+  font-size: 11px;
+  font-family: var(--font-ui);
+  opacity: 0.8;
+}
 .pb-dots::after {
   content: '.';
   animation: pb-dots 1.2s steps(1, end) infinite;
