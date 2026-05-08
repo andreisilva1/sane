@@ -22,8 +22,12 @@ func readDir(root string) ([]Node, error) {
 		return nil, err
 	}
 	var dirs, files []Node
+	skipNames := map[string]bool{
+		".git": true, ".DS_Store": true, ".Spotlight-V100": true,
+		".Trashes": true, ".fseventsd": true, "Thumbs.db": true, ".svn": true,
+	}
 	for _, e := range entries {
-		if len(e.Name()) > 0 && e.Name()[0] == '.' {
+		if skipNames[e.Name()] {
 			continue
 		}
 		full := filepath.Join(root, e.Name())

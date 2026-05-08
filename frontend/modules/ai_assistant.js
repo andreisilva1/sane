@@ -21,64 +21,87 @@
   };
 
   // ── Intent Classifier ─────────────────────────────────────
-  // LLM-based: one small round-trip before the main request.
-  // Language-agnostic — the model understands the user's intent
-  // regardless of what language they write in.
-  // Falls back to CHAT on timeout or error.
+  // Regex fast path (instant, multilingual) → LLM fallback for
+  // ambiguous messages the regex doesn't confidently match.
 
-  const CLASSIFY_PROMPT = `Classify the user message into exactly one intent.
-Reply with only the intent label — nothing else.
+  const PAT_BUILDER = [
+    // Explicit creation verb (EN + PT)
+    /\b(cri[ae]r?|fa[cç]a?|fazer?|make|build|create|generate|scaffold|construa?|desenvolva?|monte|montar|implemente?r?)\b.{0,80}\b(projeto|project|app|application|site|website|sistema|ferramenta|tool|game|jogo|dashboard|api|server|bot|plataforma|platform)\b/i,
+    // "want / need / quero" + project noun
+    /\b(quero|want|need|preciso|gostaria)\b.{0,50}\b(projeto|project|app|application|sistema|site|website|dashboard|ferramenta|tool|game|jogo)\b/i,
+    // "start / begin a new project"
+    /\b(start|begin|iniciar?|come[cç]ar?)\b.{0,30}\b(new|novo|um|uma)\b.{0,30}\b(projeto|project|app)\b/i,
+    // "build me / build us"
+    /\bbuild\s+(me|us)\b/i,
+    // Implicit description: project noun + feature words, no question markers
+    /^(?!.*\b(como|por\s*que|what\s+is|how\s+to|why|onde|when|quando|o\s+que\s+[eé])\b)(?=.*\b(projeto|project|app|application|sistema|site|dashboard)\b)(?=.*\b(simples|simple|minimalista|minimal|interativo|interactive|b[aá]sico|basic|completo|full|local|sem\s+login|without\s+login|100%)\b).+/i,
+  ];
+  const PAT_PROJECT_OP = [
+    /\b(all\s+files?|entire\s+(project|codebase|repo|repository))\b/i,
+    /\b(migrate|port|convert)\b.{0,30}\b(project|codebase|all|entire)\b/i,
+  ];
+  const PAT_FILE_EDIT = [
+    /\b(fix|refactor|rewrite|improve|add|remove|update|change|modify|implement|simplify|optimize)\b.{0,60}\b(this|current)\b/i,
+    /\b(this\s+file|this\s+code|this\s+function|this\s+class|este\s+arquivo|este\s+c[oó]digo|essa\s+fun[cç][aã]o)\b/i,
+    /\b(corrija?|melhore?|atualize?|modifique?|refatore?|implemente?)\b.{0,60}\b(este|esse|isso|o\s+c[oó]digo|a\s+fun[cç][aã]o|a\s+classe)\b/i,
+  ];
 
-Intents:
-BUILDER     — user wants to generate a new project, app, tool, website, or game from scratch
-FILE_EDIT   — user wants to modify, fix, or improve the currently open file
-PROJECT_OP  — user wants to change multiple files across an existing project or codebase
-CHAT        — question, explanation, general help, or anything else
+  // LLM fallback — used only when regex gives no signal
+  const CLASSIFY_PROMPT =
+    'Reply with exactly one word — the intent label. No explanation.\n\n' +
+    'BUILDER=generate new project/app/tool from scratch | ' +
+    'FILE_EDIT=modify the open file | ' +
+    'PROJECT_OP=change multiple existing files | ' +
+    'CHAT=anything else\n\nMessage: ';
 
-Message: `;
+  async function llmClassify(message, model) {
+    try {
+      const ac  = new AbortController();
+      const tid = setTimeout(() => ac.abort(), 6000);
+      const res = await fetch('http://localhost:7654/ai/ask', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ model, prompt: CLASSIFY_PROMPT + '"' + message.slice(0, 200) + '"' }),
+        signal:  ac.signal,
+      });
+      clearTimeout(tid);
+      if (!res.ok) return INTENT.CHAT;
+      const reader = res.body.getReader();
+      const dec    = new TextDecoder();
+      let buf = '', full = '';
+      outer: while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        const lines = buf.split('\n');
+        buf = lines.pop();
+        for (const raw of lines) {
+          if (!raw.startsWith('data: ')) continue;
+          try { const e = JSON.parse(raw.slice(6)); if (e.response) full += e.response; if (e.done) break outer; } catch {}
+        }
+        // Stop as soon as we have a recognisable label (don't wait for a full response)
+        const up = full.trim().toUpperCase();
+        if (up.includes('BUILDER') || up.includes('FILE_EDIT') || up.includes('PROJECT_OP') || up.includes('CHAT')) break;
+      }
+      const label = full.trim().toUpperCase();
+      if (label.includes('BUILDER'))    return INTENT.BUILDER;
+      if (label.includes('FILE_EDIT'))  return INTENT.FILE_EDIT;
+      if (label.includes('PROJECT_OP')) return INTENT.PROJECT_OP;
+    } catch {}
+    return INTENT.CHAT;
+  }
 
   class IntentClassifier {
     async classify(message, fileOpen, model) {
-      if (!model) return INTENT.CHAT;
-      try {
-        const ac  = new AbortController();
-        const tid = setTimeout(() => ac.abort(), 8000);
-        const res = await fetch('http://localhost:7654/ai/ask', {
-          method:  'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ model, prompt: CLASSIFY_PROMPT + '"' + message.slice(0, 300) + '"' }),
-          signal:  ac.signal,
-        });
-        clearTimeout(tid);
-        if (!res.ok) return INTENT.CHAT;
+      // Fast path — regex (instant, no LLM call)
+      for (const p of PAT_BUILDER)    if (p.test(message)) return INTENT.BUILDER;
+      for (const p of PAT_PROJECT_OP) if (p.test(message)) return INTENT.PROJECT_OP;
+      if (fileOpen)
+        for (const p of PAT_FILE_EDIT) if (p.test(message)) return INTENT.FILE_EDIT;
 
-        const reader = res.body.getReader();
-        const dec    = new TextDecoder();
-        let   buf    = '', full = '';
-        outer: while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buf += dec.decode(value, { stream: true });
-          const lines = buf.split('\n');
-          buf = lines.pop();
-          for (const raw of lines) {
-            if (!raw.startsWith('data: ')) continue;
-            try {
-              const evt = JSON.parse(raw.slice(6).trim());
-              if (evt.response) full += evt.response;
-              if (evt.done) break outer;
-            } catch {}
-          }
-        }
-
-        const label = full.trim().toUpperCase();
-        if (label.includes('BUILDER'))    return INTENT.BUILDER;
-        if (label.includes('FILE_EDIT'))  return INTENT.FILE_EDIT;
-        if (label.includes('PROJECT_OP')) return INTENT.PROJECT_OP;
-        return INTENT.CHAT;
-      } catch {
-        return INTENT.CHAT;
-      }
+      // Slow path — LLM for ambiguous messages
+      if (model) return llmClassify(message, model);
+      return INTENT.CHAT;
     }
   }
 

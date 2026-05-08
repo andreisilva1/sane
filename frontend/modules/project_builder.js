@@ -125,34 +125,107 @@
   function buildPlanPrompt(desc, feedback) {
     const folder = state.folder?.split(/[/\\]/).pop() || 'project';
     return (
-      `You are a code scaffolding planner. Output ONLY a JSON object listing the files needed for a project. Do NOT include file contents.\n\n` +
+      `You are a project scaffolding planner. Output ONLY a JSON object listing files for a project. Do NOT include file contents.\n\n` +
       `PROJECT FOLDER: ${folder}\n` +
       `REQUEST: ${desc}\n` +
       (feedback ? `REFINEMENT: ${feedback}\n` : '') +
-      `\nOutput exactly this JSON shape:\n` +
-      `{"summary":"one line description","stack":"comma-separated technologies","steps":[{"file":"relative/path.ext","description":"what this file does"}]}\n\n` +
+      `\nOutput exactly this JSON shape — nothing else:\n` +
+      `{"summary":"one-line description","stack":"comma-separated technologies","steps":[{"file":"relative/path.ext","description":"what this file does and every npm package it imports"}]}\n\n` +
       `RULES:\n` +
-      `1. Output starts with { and ends with } — nothing else. No markdown, no explanation.\n` +
+      `1. Output starts with { and ends with } — no markdown, no explanation.\n` +
       `2. First entry must be README.md.\n` +
-      `3. Include EVERY file the project needs to run — source files AND all config/setup files (package.json, requirements.txt, vite.config.js, tsconfig.json, .env.example, Makefile, etc.). Never omit dependency manifests.\n` +
-      `4. Do NOT include a "content" field — file paths and descriptions only.`
+      `3. Include EVERY file needed: source files, components, styles, AND all config/manifest files. Never omit.\n` +
+      `4. Dependency manifest (package.json / requirements.txt / go.mod / etc.) is MANDATORY. Its description must name every package the project will import.\n` +
+      `5. Vite / React projects: index.html goes at the PROJECT ROOT (not inside public/). Entry file must be src/main.tsx. Reference it as <script type="module" src="/src/main.tsx">.\n` +
+      `6. Use current stable versions: React 18, Vite 5, TypeScript 5, react-router-dom 6, chart.js 4, @vitejs/plugin-react 4.\n` +
+      `7. Do NOT include a "content" field — file paths and descriptions only.\n` +
+      `8. Generate package.json as the LAST step (after all source files), so all dependencies are known.`
     );
+  }
+
+  // ── Stack-specific generation hints ───────────────────────
+  function stackHints(file, stack) {
+    const f = file.toLowerCase();
+    const s = (stack || '').toLowerCase();
+    const isReact = s.includes('react') || f.endsWith('.tsx') || f.endsWith('.jsx');
+    const isVite  = s.includes('vite');
+    const hints   = [];
+
+    if (f === 'package.json') {
+      hints.push(
+        '- List EVERY npm package imported anywhere in this project as a dependency.',
+        '- Current versions: react@18.2, react-dom@18.2, react-router-dom@6.8, vite@5.0, @vitejs/plugin-react@4.0, typescript@5.0, chart.js@4.0.',
+        '- Scripts must include: "dev":"vite", "build":"tsc && vite build", "preview":"vite preview".',
+        '- Do NOT set "main" for a Vite SPA.',
+        '- devDependencies: vite, @vitejs/plugin-react, typescript, and all @types/* packages needed.',
+      );
+    }
+
+    if (f === 'index.html' && (isVite || isReact)) {
+      hints.push(
+        '- File lives at the PROJECT ROOT, not inside public/.',
+        '- Entry script: <script type="module" src="/src/main.tsx"></script>',
+        '- Do NOT link any CSS file here; import CSS inside src/main.tsx or component files.',
+        '- Only a minimal HTML shell — no inline scripts, no CDN links.',
+      );
+    }
+
+    if (f.match(/vite\.config\.[tj]s$/)) {
+      hints.push(
+        '- Import: import react from "@vitejs/plugin-react"',
+        '- plugins: [react()] — do NOT use @vitejs/plugin-react-swc unless requested.',
+      );
+    }
+
+    if (isReact && (f.endsWith('.tsx') || f.endsWith('.jsx'))) {
+      hints.push(
+        '- NEVER put <script> tags inside JSX — they are ignored by React.',
+        '- To use Chart.js or any canvas library: import Chart, declare useRef<HTMLCanvasElement>(null), initialise inside useEffect, and return () => chart.destroy() for cleanup.',
+        '- Register Chart.js once: Chart.register(...registerables) at the top of any file that uses it.',
+        '- All component props must be typed with a TypeScript interface.',
+        '- Import every hook, type, and named export you use.',
+        '- Use react-router-dom v6 API: import { Link, useNavigate } from "react-router-dom".',
+      );
+    }
+
+    if (f === 'src/main.tsx' || f === 'src/index.tsx') {
+      hints.push(
+        '- Use ReactDOM.createRoot(document.getElementById("root")!).render(...).',
+        '- Wrap the app in <React.StrictMode>.',
+        '- Import global CSS here if a styles file exists in the project.',
+      );
+    }
+
+    if (f.endsWith('requirements.txt')) {
+      hints.push('- Pin exact versions. Include every package imported anywhere in the project.');
+    }
+
+    return hints.length ? `IMPORTANT RULES FOR THIS FILE:\n${hints.join('\n')}\n\n` : '';
   }
 
   // ── Phase 2 prompt: single file content (raw text) ───────
   function buildFilePrompt(step) {
+    const allFiles = plan.steps
+      .map(s => `  ${s.file}  —  ${s.description}`)
+      .join('\n');
     return (
-      `Project: ${plan.summary} (${plan.stack})\n` +
-      `Write the complete content for this file: ${step.file}\n` +
+      `Project: ${plan.summary}\n` +
+      `Stack: ${plan.stack}\n\n` +
+      `All project files:\n${allFiles}\n\n` +
+      `Write the complete content for: ${step.file}\n` +
       `Purpose: ${step.description}\n\n` +
-      `Output ONLY the raw file content. No explanation, no markdown fences, no JSON wrapping.\n` +
-      `The file must be complete and working — no TODOs, no placeholders.`
+      stackHints(step.file, plan.stack) +
+      `GENERAL RULES:\n` +
+      `- Output ONLY the raw file content — no explanation, no markdown fences, no JSON wrapper.\n` +
+      `- Complete and working — no TODOs, no placeholders, no stub functions.\n` +
+      `- Import every package you use. Only reference files listed above.`
     );
   }
 
   function stripFences(text) {
     return text
-      .replace(/^```[\w]*\r?\n?/m, '')
+      .replace(/<think>[\s\S]*?<\/think>/gi, '')
+      .replace(/^```[\w.-]*\r?\n?/m, '')
       .replace(/\r?\n?```\s*$/m, '')
       .trim();
   }
@@ -235,6 +308,33 @@
       if (!plan) throw new Error('Could not parse plan JSON. Try again.');
       if (!Array.isArray(plan.steps) || plan.steps.length === 0)
         throw new Error('Plan has no files. Try a more specific prompt.');
+
+      const MANIFEST_RE = /^(package\.json|requirements\.txt|go\.mod|Cargo\.toml|Gemfile|pom\.xml|build\.gradle)$/i;
+
+      // Inject manifest if model forgot to include one
+      const hasManifest = plan.steps.some(s => MANIFEST_RE.test(s.file.split(/[/\\]/).pop()));
+      if (!hasManifest) {
+        const st = (plan.stack || '').toLowerCase();
+        if (/node|react|vue|angular|next|vite|express|typescript|javascript|svelte/.test(st))
+          plan.steps.push({ file: 'package.json',    description: 'npm manifest — list every dependency and devDependency used in the project, plus dev/build/preview scripts' });
+        else if (/python|flask|django|fastapi/.test(st))
+          plan.steps.push({ file: 'requirements.txt', description: 'Python dependencies with pinned versions for every package imported in the project' });
+        else if (/\bgo\b|golang/.test(st))
+          plan.steps.push({ file: 'go.mod',           description: 'Go module definition with all external imports' });
+        else if (/rust/.test(st))
+          plan.steps.push({ file: 'Cargo.toml',       description: 'Rust package manifest with all crate dependencies' });
+        else if (/ruby/.test(st))
+          plan.steps.push({ file: 'Gemfile',           description: 'Ruby gem dependencies' });
+      }
+
+      // Manifests last so all source files are known when generating them
+      plan.steps.sort((a, b) => {
+        const aM = MANIFEST_RE.test(a.file.split(/[/\\]/).pop());
+        const bM = MANIFEST_RE.test(b.file.split(/[/\\]/).pop());
+        if (aM && !bM) return 1;
+        if (!aM && bM) return -1;
+        return 0;
+      });
 
       savePlanState(plan, 0);
 

@@ -280,12 +280,19 @@
 
   let _scrollRaf = null;
   function appendToMessage(el, chunk) {
-    (el.querySelector('.ai-msg-content') || el).insertAdjacentText('beforeend', chunk);
+    el._raw = (el._raw || '') + chunk;
     if (!_scrollRaf) {
       _scrollRaf = requestAnimationFrame(() => {
         elMessages.scrollTop = elMessages.scrollHeight;
         _scrollRaf = null;
       });
+    }
+    if (!el._mdTimer) {
+      el._mdTimer = setTimeout(() => {
+        el._mdTimer = null;
+        const content = el.querySelector('.ai-msg-content');
+        if (content) content.innerHTML = renderMarkdown(el._raw);
+      }, 80);
     }
   }
 
@@ -366,17 +373,19 @@
     abortCtrl = new AbortController();
 
     function finalize(fullText, intent) {
+      clearTimeout(elReply._mdTimer); elReply._mdTimer = null;
       elReply.classList.remove('ai-streaming');
       streaming  = false;
       abortCtrl  = null;
       elSend.textContent = '↑';
       elSend.title = 'Send';
       window.sane._aiSelection = null;
-      if (fullText) {
+      const text = fullText || elReply._raw || '';
+      if (text) {
         const content = elReply.querySelector('.ai-msg-content');
-        if (content) { elReply.dataset.raw = fullText; content.innerHTML = renderMarkdown(fullText); }
-        if (intent === window.sane.INTENT?.FILE_EDIT) tryAddFileApplyBtn(elReply, fullText);
-        else tryAddApplyBtn(elReply, fullText);
+        if (content) { elReply.dataset.raw = text; content.innerHTML = renderMarkdown(text); }
+        if (intent === window.sane.INTENT?.FILE_EDIT) tryAddFileApplyBtn(elReply, text);
+        else tryAddApplyBtn(elReply, text);
       }
       saveHistory();
     }
@@ -399,14 +408,17 @@
           token  => appendToMessage(elReply, token),
           (full, intentType) => { finalize(full, intentType); resolve(); },
           err    => {
+            clearTimeout(elReply._mdTimer); elReply._mdTimer = null;
             const content = elReply.querySelector('.ai-msg-content') || elReply;
             if (err !== null) {
               content.textContent = '⚠ ' + err;
               elReply.classList.add('ai-error');
-            } else if (!content.textContent.trim()) {
-              content.textContent = '(stopped)';
+              finalize('', null);
+            } else {
+              // stopped — render whatever arrived
+              finalize(elReply._raw || '', null);
+              if (!content.textContent.trim()) content.textContent = '(stopped)';
             }
-            finalize('', null);
             resolve();
           },
           abortCtrl.signal,
