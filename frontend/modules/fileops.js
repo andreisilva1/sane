@@ -209,16 +209,40 @@
   document.getElementById('fo-confirm').addEventListener('click', confirmDialog);
   elBackdrop.addEventListener('click', closeDialog);
 
-  // Delete / Shift+Delete on selected tree item
+  // Delete / Shift+Delete on selected tree item(s)
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Delete') return;
     const tag = document.activeElement?.tagName;
     if (tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement?.isContentEditable) return;
-    const selected = document.querySelector('.tree-item.selected');
-    if (!selected) return;
+    const allSelected = [...document.querySelectorAll('.tree-item.selected')];
+    if (!allSelected.length) return;
     e.preventDefault();
-    ctxPath  = selected.dataset.path;
-    ctxIsDir = selected.classList.contains('dir');
-    doDelete();
+
+    if (allSelected.length === 1) {
+      ctxPath  = allSelected[0].dataset.path;
+      ctxIsDir = allSelected[0].classList.contains('dir');
+      doDelete();
+      return;
+    }
+
+    // Multi-delete
+    const names = allSelected.map(el => nameOf(el.dataset.path)).join(', ');
+    if (!confirm(`Delete ${allSelected.length} items?\n${names}`)) return;
+    const paths = allSelected.map(el => el.dataset.path);
+    Promise.all(paths.map(p =>
+      apiFetch('/file?path=' + encodeURIComponent(p), { method: 'DELETE' }).catch(() => {})
+    )).then(() => {
+      if (paths.some(p => state.filePath === p || state.filePath?.startsWith(p + sep(p)))) {
+        state.filePath = null; state.content = ''; state.dirty = false;
+        document.getElementById('editor').value = '';
+        document.getElementById('editor').disabled = true;
+        document.getElementById('current-file').textContent = '';
+        document.getElementById('header-sep').classList.add('hidden');
+        document.getElementById('btn-save').disabled = true;
+        if (window.sane?.onFileOpen) window.sane.onFileOpen(null);
+      }
+      refresh();
+      setStatus(`Deleted ${paths.length} items`, 'ok');
+    });
   });
 })();

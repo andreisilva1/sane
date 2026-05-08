@@ -230,9 +230,12 @@ Performance depends on your hardware. A modern machine with 16 GB RAM handles th
 ### 1.1.0
 - **TypeScript first-class support** — `.ts` files get syntax highlighting, autocomplete, and a Run button (via `tsx`); `.tsx` files get highlighting and inline AI toolbar; TypeScript workspace is auto-detected from the open file and injected into AI context
 - **Curated dependency presets** — Project Builder now uses validated stack presets (react-vite-ts, node-express-ts, node-ts, vanilla-vite) with pinned known-good versions for 30+ packages instead of dynamically generating dependency combinations
-- **Post-generation sanitizer** — generated `package.json` is automatically corrected: hallucinated versions replaced with pinned ones, banned packages removed, `@types/*` for packages that ship native types stripped, misplaced entries moved to the right section
+- **Post-generation sanitizer** — generated `package.json` is automatically corrected: hallucinated versions replaced with pinned ones, banned packages removed, `@types/*` for packages that ship native types stripped, misplaced entries moved to the right section; meaningful corrections shown inline after each file step
+- **Confidence-based package filtering** — packages are classified HIGH / MEDIUM / LOW; unknown-scoped packages and suspicious generic names (core, runtime, internal, etc.) are removed automatically
 - **requirements.txt sanitizer** — Python dependency files are deduplicated and versions corrected against a curated Python package table
 - **Dotfiles visible** — `.env`, `.gitignore`, `.eslintrc`, and other dotfiles now appear in the file tree (previously hidden by the backend)
+- **Multi-select in file tree** — `Ctrl+click` toggles individual items; `Shift+click` selects a range; `Delete` removes all selected items at once
+- **Double Router fix** — Project Builder now explicitly anchors `<BrowserRouter>` to `main.tsx` only, preventing the generated double-Router crash in React apps
 
 ### 1.0.0
 - **Unified AI pipeline** — intent classification, context assembly, and streaming execution are now a single cohesive system; the "Project Builder mode" toggle is removed — intent is inferred automatically from your message in any language

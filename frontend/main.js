@@ -110,6 +110,21 @@ function getExpandedPaths() {
 }
 
 // ── File tree ─────────────────────────────────────────────
+let lastClickedPath = null; // anchor for Shift+click range selection
+
+function selectRange(toRow) {
+  const fromRow = lastClickedPath
+    ? elTree.querySelector(`.tree-item[data-path="${CSS.escape(lastClickedPath)}"]`)
+    : null;
+  const allItems = [...elTree.querySelectorAll('.tree-item')];
+  elTree.querySelectorAll('.tree-item.selected').forEach(el => el.classList.remove('selected'));
+  if (!fromRow || fromRow === toRow) { toRow.classList.add('selected'); return; }
+  const a = allItems.indexOf(fromRow), b = allItems.indexOf(toRow);
+  if (a === -1 || b === -1) { toRow.classList.add('selected'); return; }
+  const [lo, hi] = a < b ? [a, b] : [b, a];
+  allItems.slice(lo, hi + 1).forEach(el => el.classList.add('selected'));
+}
+
 function renderTree(nodes, preExpanded = new Set()) {
   elTree.innerHTML = '';
   buildTreeNodes(nodes || [], elTree, 0, preExpanded);
@@ -152,7 +167,13 @@ function buildTreeNodes(nodes, container, depth, preExpanded = new Set()) {
         childWrap.classList.toggle('hidden', !expanded);
       }
 
-      row.addEventListener('click', e => { e.stopPropagation(); toggleDir(); });
+      row.addEventListener('click', e => {
+        e.stopPropagation();
+        if (e.ctrlKey || e.metaKey) { row.classList.toggle('selected'); lastClickedPath = node.path; return; }
+        if (e.shiftKey)             { selectRange(row); return; }
+        lastClickedPath = node.path;
+        toggleDir();
+      });
       row.addEventListener('keydown', e => {
         if (e.key === 'Enter' || e.key === ' ')        { e.preventDefault(); toggleDir(); }
         if (e.key === 'ArrowRight' && !expanded)        { e.preventDefault(); toggleDir(); }
@@ -166,7 +187,13 @@ function buildTreeNodes(nodes, container, depth, preExpanded = new Set()) {
       container.appendChild(row);
       container.appendChild(childWrap);
     } else {
-      row.addEventListener('click', e => { e.stopPropagation(); openFile(node.path, row); });
+      row.addEventListener('click', e => {
+        e.stopPropagation();
+        if (e.ctrlKey || e.metaKey) { row.classList.toggle('selected'); lastClickedPath = node.path; return; }
+        if (e.shiftKey)             { selectRange(row); return; }
+        lastClickedPath = node.path;
+        openFile(node.path, row);
+      });
       row.addEventListener('keydown', e => {
         if (e.key === 'Enter') { e.preventDefault(); openFile(node.path, row); }
       });
@@ -183,7 +210,7 @@ async function openFile(path, rowEl) {
 
   // Mark selection
   document.querySelectorAll('.tree-item.selected').forEach(el => el.classList.remove('selected'));
-  if (rowEl) rowEl.classList.add('selected');
+  if (rowEl) { rowEl.classList.add('selected'); lastClickedPath = path; }
 
   if (state.dirty) {
     const ok = confirm('Unsaved changes. Discard and open?');
