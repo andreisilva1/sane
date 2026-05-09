@@ -1,5 +1,5 @@
 // ── AI Pipeline: Classify → Assemble Context → Execute ────
-// Stage 1: IntentClassifier  — heuristics, extensible
+// Stage 1: IntentClassifier  — LLM-first, regex as optional hints only
 // Stage 2: ContextAssembler  — provider-based, modular
 // Stage 3: AIPipeline.process() — orchestrates the 4 stages
 // Stage 4: execute(onToken, onDone, onError, signal) — SSE stream
@@ -21,54 +21,96 @@
   };
 
   // ── Intent Classifier ─────────────────────────────────────
-  // Regex fast path (instant, multilingual) → LLM fallback for
-  // ambiguous messages the regex doesn't confidently match.
+  // LLM-first: every message goes through a lightweight LLM classification
+  // step that returns structured JSON. Regex patterns are used only as
+  // optional hints injected into the classification prompt — they never
+  // make the routing decision directly.
 
-  const PAT_BUILDER = [
-    // Explicit creation verb (EN + PT)
+  // Regex hint generators — inform the LLM, do NOT route.
+  const HINT_BUILDER = [
     /\b(cri[ae]r?|fa[cç]a?|fazer?|make|build|create|generate|scaffold|construa?|desenvolva?|monte|montar|implemente?r?)\b.{0,80}\b(projeto|project|app|application|site|website|sistema|ferramenta|tool|game|jogo|dashboard|api|server|bot|plataforma|platform)\b/i,
-    // "want / need / quero" + project noun
     /\b(quero|want|need|preciso|gostaria)\b.{0,50}\b(projeto|project|app|application|sistema|site|website|dashboard|ferramenta|tool|game|jogo)\b/i,
-    // "start / begin a new project"
     /\b(start|begin|iniciar?|come[cç]ar?)\b.{0,30}\b(new|novo|um|uma)\b.{0,30}\b(projeto|project|app)\b/i,
-    // "build me / build us"
     /\bbuild\s+(me|us)\b/i,
-    // Implicit description: project noun + feature words, no question markers
     /^(?!.*\b(como|por\s*que|what\s+is|how\s+to|why|onde|when|quando|o\s+que\s+[eé])\b)(?=.*\b(projeto|project|app|application|sistema|site|dashboard)\b)(?=.*\b(simples|simple|minimalista|minimal|interativo|interactive|b[aá]sico|basic|completo|full|local|sem\s+login|without\s+login|100%)\b).+/i,
   ];
-  const PAT_PROJECT_OP = [
+  const HINT_PROJECT_OP = [
     /\b(all\s+files?|entire\s+(project|codebase|repo|repository))\b/i,
     /\b(migrate|port|convert)\b.{0,30}\b(project|codebase|all|entire)\b/i,
   ];
-  const PAT_FILE_EDIT = [
+  const HINT_FILE_EDIT = [
     /\b(fix|refactor|rewrite|improve|add|remove|update|change|modify|implement|simplify|optimize)\b.{0,60}\b(this|current)\b/i,
     /\b(this\s+file|this\s+code|this\s+function|this\s+class|este\s+arquivo|este\s+c[oó]digo|essa\s+fun[cç][aã]o)\b/i,
     /\b(corrija?|melhore?|atualize?|modifique?|refatore?|implemente?)\b.{0,60}\b(este|esse|isso|o\s+c[oó]digo|a\s+fun[cç][aã]o|a\s+classe)\b/i,
   ];
 
-  // LLM fallback — used only when regex gives no signal
+  // ── Classification prompt ─────────────────────────────────
   const CLASSIFY_PROMPT =
-    'Reply with exactly one word — the intent label. No explanation.\n\n' +
-    'BUILDER=generate new project/app/tool from scratch | ' +
-    'FILE_EDIT=modify the open file | ' +
-    'PROJECT_OP=change multiple existing files | ' +
-    'CHAT=anything else\n\nMessage: ';
+    'You are an intent classifier for a code editor AI system.\n\n' +
+    'Your job is to determine what the user wants to do based on their message.\n\n' +
+    'You MUST choose exactly one intent:\n' +
+    'CHAT_RESPONSE → general questions, explanations, discussions\n' +
+    'FILE_EDIT → changes to a specific file or localized code\n' +
+    'PROJECT_OPERATION → multi-file or project-wide changes\n' +
+    'PROJECT_BUILDER → creating a new project from scratch\n\n' +
+    'Be conservative:\n' +
+    '- Prefer FILE_EDIT over PROJECT_OPERATION when unsure\n' +
+    '- Prefer CHAT_RESPONSE if no clear action is requested\n\n' +
+    'Return ONLY valid JSON — no text outside the JSON object:\n' +
+    '{"intent":"CHAT_RESPONSE|FILE_EDIT|PROJECT_OPERATION|PROJECT_BUILDER","confidence":0.85,"reason":"brief reason","target":{"type":"none|current_file|specific_file|multiple_files|project","file":"optional path","scope_hint":"optional"}}';
 
-  async function llmClassify(message, model) {
+  function buildClassifyPrompt(message, fileOpen, fileName, regexHint) {
+    const ctx = [
+      fileOpen && fileName ? 'Active file: ' + fileName : null,
+      regexHint            ? 'Pattern hint: ' + regexHint : null,
+    ].filter(Boolean).join('\n');
+    return CLASSIFY_PROMPT +
+      (ctx ? '\n\nContext:\n' + ctx : '') +
+      '\n\nMessage: "' + message.slice(0, 300) + '"';
+  }
+
+  // Returns true when `text` contains a complete JSON object (brace depth 0).
+  function isJsonComplete(text) {
+    let depth = 0, inStr = false, esc = false;
+    for (const c of text) {
+      if (esc)              { esc = false; continue; }
+      if (c === '\\' && inStr) { esc = true;  continue; }
+      if (c === '"')        { inStr = !inStr; continue; }
+      if (inStr)            { continue; }
+      if      (c === '{')   { depth++; }
+      else if (c === '}')   { depth--; if (depth === 0) return true; }
+    }
+    return false;
+  }
+
+  // Extracts the first complete JSON object from a string.
+  function extractJsonObject(text) {
+    text = text.replace(/```(?:json)?\s*/gi, '').replace(/```/g, '').trim();
+    const start = text.indexOf('{');
+    const end   = text.lastIndexOf('}');
+    if (start === -1 || end <= start) return null;
+    return text.slice(start, end + 1);
+  }
+
+  // Calls the LLM and returns a structured classification result, or null on failure.
+  async function llmClassify(message, model, fileOpen, fileName, regexHint) {
+    const prompt = buildClassifyPrompt(message, fileOpen, fileName, regexHint);
     try {
       const ac  = new AbortController();
-      const tid = setTimeout(() => ac.abort(), 6000);
+      const tid = setTimeout(() => ac.abort(), 8000);
       const res = await fetch('http://localhost:7654/ai/ask', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ model, prompt: CLASSIFY_PROMPT + '"' + message.slice(0, 200) + '"' }),
+        body:    JSON.stringify({ model, prompt }),
         signal:  ac.signal,
       });
       clearTimeout(tid);
-      if (!res.ok) return INTENT.CHAT;
+      if (!res.ok) return null;
+
       const reader = res.body.getReader();
       const dec    = new TextDecoder();
-      let buf = '', full = '';
+      let   buf = '', full = '';
+
       outer: while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -77,30 +119,54 @@
         buf = lines.pop();
         for (const raw of lines) {
           if (!raw.startsWith('data: ')) continue;
-          try { const e = JSON.parse(raw.slice(6)); if (e.response) full += e.response; if (e.done) break outer; } catch {}
+          try {
+            const e = JSON.parse(raw.slice(6));
+            if (e.response) { full += e.response; }
+            if (e.done || isJsonComplete(full)) break outer;
+          } catch {}
         }
-        // Stop as soon as we have a recognisable label (don't wait for a full response)
-        const up = full.trim().toUpperCase();
-        if (up.includes('BUILDER') || up.includes('FILE_EDIT') || up.includes('PROJECT_OP') || up.includes('CHAT')) break;
       }
-      const label = full.trim().toUpperCase();
-      if (label.includes('BUILDER'))    return INTENT.BUILDER;
-      if (label.includes('FILE_EDIT'))  return INTENT.FILE_EDIT;
-      if (label.includes('PROJECT_OP')) return INTENT.PROJECT_OP;
-    } catch {}
-    return INTENT.CHAT;
+
+      const jsonStr = extractJsonObject(full);
+      if (!jsonStr) return null;
+
+      const result = JSON.parse(jsonStr);
+      if (!result.intent || typeof result.confidence !== 'number') return null;
+
+      const intentMap = {
+        'CHAT_RESPONSE':    INTENT.CHAT,
+        'FILE_EDIT':        INTENT.FILE_EDIT,
+        'PROJECT_OPERATION': INTENT.PROJECT_OP,
+        'PROJECT_BUILDER':  INTENT.BUILDER,
+      };
+      const mapped = intentMap[result.intent];
+      if (!mapped) return null;
+
+      return { intent: mapped, confidence: result.confidence };
+    } catch {
+      return null;
+    }
   }
 
   class IntentClassifier {
     async classify(message, fileOpen, model) {
-      // Fast path — regex (instant, no LLM call)
-      for (const p of PAT_BUILDER)    if (p.test(message)) return INTENT.BUILDER;
-      for (const p of PAT_PROJECT_OP) if (p.test(message)) return INTENT.PROJECT_OP;
-      if (fileOpen)
-        for (const p of PAT_FILE_EDIT) if (p.test(message)) return INTENT.FILE_EDIT;
+      // Compute regex hint — for informing the LLM only, not for routing.
+      let regexHint = null;
+      for (const p of HINT_BUILDER)    if (p.test(message)) { regexHint = 'PROJECT_BUILDER';   break; }
+      if (!regexHint)
+        for (const p of HINT_PROJECT_OP) if (p.test(message)) { regexHint = 'PROJECT_OPERATION'; break; }
+      if (!regexHint && fileOpen)
+        for (const p of HINT_FILE_EDIT)  if (p.test(message)) { regexHint = 'FILE_EDIT';         break; }
 
-      // Slow path — LLM for ambiguous messages
-      if (model) return llmClassify(message, model);
+      // LLM classification — primary decision.
+      if (model) {
+        const fileName = state.filePath ? state.filePath.split(/[/\\]/).pop() : null;
+        const result   = await llmClassify(message, model, fileOpen, fileName, regexHint);
+        if (result && result.confidence >= 0.6) return result.intent;
+      }
+
+      // Fallback: LLM unavailable, timed out, parse failure, or low confidence.
+      if (fileOpen) return INTENT.FILE_EDIT;
       return INTENT.CHAT;
     }
   }
