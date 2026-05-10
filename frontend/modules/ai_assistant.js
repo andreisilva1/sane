@@ -22,18 +22,25 @@
 
   // ── Intent Classifier ─────────────────────────────────────
   // LLM-first: every message goes through a lightweight LLM classification
-  // step that returns structured JSON. Regex patterns are used only as
-  // optional hints injected into the classification prompt — they never
-  // make the routing decision directly.
+  // step that returns structured JSON. Regex patterns serve two roles:
+  //   1. Hard pre-check (BUILDER_TRIGGERS) — bypass LLM entirely, always wins.
+  //   2. LLM hint (HINT_*) — injected into classify prompt for soft guidance.
 
-  // Regex hint generators — inform the LLM, do NOT route.
-  const HINT_BUILDER = [
+  // Hard pre-check: if ANY of these match the message is PROJECT_BUILDER —
+  // no LLM call is made. Covers all "create / build / generate a project"
+  // phrasings in English and Portuguese.
+  const BUILDER_TRIGGERS = [
     /\b(cri[ae]r?|fa[cç]a?|fazer?|make|build|create|generate|scaffold|construa?|desenvolva?|monte|montar|implemente?r?)\b.{0,80}\b(projeto|project|app|application|site|website|sistema|ferramenta|tool|game|jogo|dashboard|api|server|bot|plataforma|platform)\b/i,
     /\b(quero|want|need|preciso|gostaria)\b.{0,50}\b(projeto|project|app|application|sistema|site|website|dashboard|ferramenta|tool|game|jogo)\b/i,
     /\b(start|begin|iniciar?|come[cç]ar?)\b.{0,30}\b(new|novo|um|uma)\b.{0,30}\b(projeto|project|app)\b/i,
     /\bbuild\s+(me|us)\b/i,
+    /\b(make|create|build|generate)\b.{0,50}\b(a|an|the|um|uma)\b.{0,50}\b(dashboard|app|website|system|api|game|bot|tool|platform|application|portal|cli|service)\b/i,
+    /\b(fa[cç]a?|faz|crie|cria|gera|gerar|desenvolva|desenvolver|monte)\b.{0,60}(\bpra\s+mim\b|\bpara\s+mim\b|\bisso\b|\bprojeto\b|\bsistema\b|\bapp\b|\bsite\b|\baplicac[aã]o\b|\bferramenta\b|\bdashboard\b|\bapi\b)/i,
     /^(?!.*\b(como|por\s*que|what\s+is|how\s+to|why|onde|when|quando|o\s+que\s+[eé])\b)(?=.*\b(projeto|project|app|application|sistema|site|dashboard)\b)(?=.*\b(simples|simple|minimalista|minimal|interativo|interactive|b[aá]sico|basic|completo|full|local|sem\s+login|without\s+login|100%)\b).+/i,
   ];
+
+  // Regex hint generators — inform the LLM, do NOT route directly.
+  const HINT_BUILDER = BUILDER_TRIGGERS;
   const HINT_PROJECT_OP = [
     /\b(all\s+files?|entire\s+(project|codebase|repo|repository))\b/i,
     /\b(migrate|port|convert)\b.{0,30}\b(project|codebase|all|entire)\b/i,
@@ -49,13 +56,14 @@
     'You are an intent classifier for a code editor AI system.\n\n' +
     'Your job is to determine what the user wants to do based on their message.\n\n' +
     'You MUST choose exactly one intent:\n' +
-    'CHAT_RESPONSE → general questions, explanations, discussions\n' +
+    'CHAT_RESPONSE → general questions, explanations, discussions — no concrete action requested\n' +
     'FILE_EDIT → changes to a specific file or localized code\n' +
-    'PROJECT_OPERATION → multi-file or project-wide changes\n' +
-    'PROJECT_BUILDER → creating a new project from scratch\n\n' +
-    'Be conservative:\n' +
-    '- Prefer FILE_EDIT over PROJECT_OPERATION when unsure\n' +
-    '- Prefer CHAT_RESPONSE if no clear action is requested\n\n' +
+    'PROJECT_OPERATION → multi-file or project-wide changes to an existing codebase\n' +
+    'PROJECT_BUILDER → the user wants to CREATE, BUILD, GENERATE, or IMPLEMENT a new project, app, website, system, dashboard, API, game, or tool from scratch. ALWAYS choose this when the user expresses intent to have something built — even if the message is long or descriptive. Examples: "create a project for...", "build a system that...", "generate an app...", "make a dashboard...", "crie o projeto", "faça isso pra mim".\n\n' +
+    'Rules:\n' +
+    '- If the final intent is execution/creation of a project → PROJECT_BUILDER (mandatory, no exceptions)\n' +
+    '- Prefer FILE_EDIT over PROJECT_OPERATION when the change is localized to one file\n' +
+    '- Use CHAT_RESPONSE only when no clear coding action is requested\n\n' +
     'Return ONLY valid JSON — no text outside the JSON object:\n' +
     '{"intent":"CHAT_RESPONSE|FILE_EDIT|PROJECT_OPERATION|PROJECT_BUILDER","confidence":0.85,"reason":"brief reason","target":{"type":"none|current_file|specific_file|multiple_files|project","file":"optional path","scope_hint":"optional"}}';
 
@@ -92,12 +100,11 @@
     return text.slice(start, end + 1);
   }
 
-  // Calls the LLM and returns a structured classification result, or null on failure.
-  async function llmClassify(message, model, fileOpen, fileName, regexHint) {
-    const prompt = buildClassifyPrompt(message, fileOpen, fileName, regexHint);
+  // Single LLM attempt with a given timeout. Returns parsed result, 'timeout', or null.
+  async function attemptClassify(prompt, model, timeoutMs) {
+    const ac  = new AbortController();
+    const tid = setTimeout(() => ac.abort(), timeoutMs);
     try {
-      const ac  = new AbortController();
-      const tid = setTimeout(() => ac.abort(), 8000);
       const res = await fetch('http://localhost:7654/ai/ask', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -134,27 +141,64 @@
       if (!result.intent || typeof result.confidence !== 'number') return null;
 
       const intentMap = {
-        'CHAT_RESPONSE':    INTENT.CHAT,
-        'FILE_EDIT':        INTENT.FILE_EDIT,
+        'CHAT_RESPONSE':     INTENT.CHAT,
+        'FILE_EDIT':         INTENT.FILE_EDIT,
         'PROJECT_OPERATION': INTENT.PROJECT_OP,
-        'PROJECT_BUILDER':  INTENT.BUILDER,
+        'PROJECT_BUILDER':   INTENT.BUILDER,
       };
       const mapped = intentMap[result.intent];
       if (!mapped) return null;
 
       return { intent: mapped, confidence: result.confidence };
-    } catch {
-      return null;
+    } catch (err) {
+      clearTimeout(tid);
+      return err.name === 'AbortError' ? 'timeout' : null;
     }
+  }
+
+  // Calls the LLM with a 12 s timeout, retrying once at 20 s on timeout.
+  async function llmClassify(message, model, fileOpen, fileName, regexHint) {
+    const prompt = buildClassifyPrompt(message, fileOpen, fileName, regexHint);
+    let result = await attemptClassify(prompt, model, 12000);
+    if (result === 'timeout') result = await attemptClassify(prompt, model, 20000);
+    return result === 'timeout' ? null : result;
+  }
+
+  // Stage 3 — lightweight message heuristics used when the LLM is unavailable.
+  function smartFallback(message, fileOpen) {
+    const m = message.toLowerCase();
+    const builderVerb = /\b(create|build|make|generate|crie|fa[cç]a?|gera|desenvolva|monte|scaffold)\b/.test(m);
+    const builderNoun = /\b(app|project|projeto|system|sistema|dashboard|api|website|site|game|bot|tool|ferramenta|plataforma|platform)\b/.test(m);
+    if (builderVerb && builderNoun) return INTENT.BUILDER;
+
+    if (/\b(all\s+files?|entire|whole\s+project|todos|inteiro|migra(te|r)|conver(t|ter)|replace\s+everywhere|refactor\s+all)\b/.test(m))
+      return INTENT.PROJECT_OP;
+
+    if (fileOpen) return INTENT.FILE_EDIT;
+    return INTENT.CHAT;
+  }
+
+  // Detects messages that explicitly reference code in the active file.
+  const CODE_REF = [
+    /\b(this|these)\b.{0,30}\b(code|file|function|class|method|variable|snippet|component)\b/i,
+    /\b(what\s+does|explain|understand)\b.{0,20}\b(this|esse|isso|esta?)\b/i,
+    /\b(esse|este|isso)\b.{0,30}\b(c[oó]digo|arquivo|fun[cç][aã]o|classe|componente)\b/i,
+    /\bisso\s+aqui\b|\bthis\s+here\b/i,
+  ];
+  function referencesLocalCode(msg) {
+    return CODE_REF.some(p => p.test(msg || ''));
   }
 
   class IntentClassifier {
     async classify(message, fileOpen, model) {
-      // Compute regex hint — for informing the LLM only, not for routing.
+      // Hard pre-check: BUILDER_TRIGGERS always wins — no LLM call needed.
+      for (const p of BUILDER_TRIGGERS) {
+        if (p.test(message)) return INTENT.BUILDER;
+      }
+
+      // Compute regex hint for LLM context.
       let regexHint = null;
-      for (const p of HINT_BUILDER)    if (p.test(message)) { regexHint = 'PROJECT_BUILDER';   break; }
-      if (!regexHint)
-        for (const p of HINT_PROJECT_OP) if (p.test(message)) { regexHint = 'PROJECT_OPERATION'; break; }
+      for (const p of HINT_PROJECT_OP) if (p.test(message)) { regexHint = 'PROJECT_OPERATION'; break; }
       if (!regexHint && fileOpen)
         for (const p of HINT_FILE_EDIT)  if (p.test(message)) { regexHint = 'FILE_EDIT';         break; }
 
@@ -165,9 +209,8 @@
         if (result && result.confidence >= 0.6) return result.intent;
       }
 
-      // Fallback: LLM unavailable, timed out, parse failure, or low confidence.
-      if (fileOpen) return INTENT.FILE_EDIT;
-      return INTENT.CHAT;
+      // Stage 3 — smart fallback when LLM unavailable, timed out, or low confidence.
+      return smartFallback(message, fileOpen);
     }
   }
 
@@ -216,6 +259,7 @@
   const selectionProvider = {
     name: 'selection', priority: 100,
     gather(intent, st) {
+      if (intent === INTENT.BUILDER) return null;
       const sel = window.sane._aiSelection;
       if (!sel) return null;
       const fname = (st.filePath || '').split(/[/\\]/).pop();
@@ -226,13 +270,17 @@
     },
   };
 
-  // Current open file — included for FILE_EDIT/PROJECT_OP automatically,
-  // and for CHAT only when the user checks "attach file"
+  // Current open file — included for FILE_EDIT/PROJECT_OP automatically;
+  // for CHAT only when user attaches it or the message references local code;
+  // always excluded for BUILDER (clean context).
   const currentFileProvider = {
     name: 'current-file', priority: 90,
     gather(intent, st) {
       if (!st.filePath || !st.content) return null;
-      if (intent === INTENT.CHAT && !window.sane._attachFile) return null;
+      if (intent === INTENT.BUILDER) return null;
+      if (intent === INTENT.CHAT &&
+          !window.sane._attachFile &&
+          !referencesLocalCode(window.sane._lastMessage)) return null;
       const fname = st.filePath.split(/[/\\]/).pop();
       const body  = st.content.length > 10000
         ? st.content.slice(0, 10000) + '\n… (truncated)'
@@ -241,28 +289,31 @@
     },
   };
 
-  // Project memory notes
+  // Project memory notes — excluded from CHAT (no implicit project context)
   const memoryProvider = {
     name: 'memory', priority: 80,
     gather(intent, st) {
+      if (intent === INTENT.CHAT) return null;
       const ctx = window.sane.getMemoryContext?.();
       return ctx ? { label: 'Project memory', content: ctx } : null;
     },
   };
 
-  // Pinned files
+  // Pinned files — excluded from BUILDER (clean env) and CHAT (no implicit context)
   const pinnedProvider = {
     name: 'pinned', priority: 75,
     gather(intent, st) {
+      if (intent === INTENT.BUILDER || intent === INTENT.CHAT) return null;
       const ctx = window.sane.getProjectContext?.();
       return ctx ? { label: 'Pinned files', content: ctx } : null;
     },
   };
 
-  // Project structure — skipped for FILE_EDIT (file is enough)
+  // Project structure — skipped for BUILDER (clean env) and FILE_EDIT (file is enough)
   const projectProvider = {
     name: 'project', priority: 60,
     async gather(intent, st) {
+      if (intent === INTENT.BUILDER) return null;
       if (intent === INTENT.FILE_EDIT && !window.sane._aiSelection) return null;
       if (!st.folder) return null;
       try {
@@ -280,10 +331,11 @@
     },
   };
 
-  // Framework signals from intent_detection.js
+  // Framework signals — excluded from CHAT (no implicit project context)
   const frameworkProvider = {
     name: 'framework-signals', priority: 50,
     gather(intent, st) {
+      if (intent === INTENT.CHAT) return null;
       const sigs = window.sane._frameworkSignals ? [...window.sane._frameworkSignals] : [];
       // Detect TypeScript workspace from open file extension or content
       const ext = (st.filePath || '').split('.').pop().toLowerCase();
@@ -314,6 +366,8 @@
       const model = window.sane.activeModel;
       if (!model) throw new Error('no-model');
 
+      window.sane._lastMessage = message;
+
       const intent = opts.forceIntent
         ? opts.forceIntent
         : await this.classifier.classify(message, !!state.filePath, model);
@@ -338,7 +392,7 @@
           body:    JSON.stringify({ model, prompt }),
           signal,
         });
-        if (!res.ok) { onError?.(await res.text()); return; }
+        if (!res.ok) { onError?.((await res.text()).trim()); return; }
 
         const reader = res.body.getReader();
         const dec    = new TextDecoder();
@@ -376,9 +430,22 @@
     }
   }
 
+  // ── Ollama error formatter ────────────────────────────────
+  // Returns a human-readable message when the backend reports Ollama is down,
+  // or null if the text does not look like an Ollama connectivity error.
+  function formatOllamaError(text) {
+    if (!text) return null;
+    const t = text.toLowerCase();
+    if (!t.includes('ollama') && !t.includes('not responding') &&
+        !t.includes('connection refused') && !t.includes('service unavailable') &&
+        !t.includes('local ai')) return null;
+    return text; // backend already returns the friendly string; pass it through
+  }
+
   // ── Expose ────────────────────────────────────────────────
   window.sane = window.sane || {};
-  window.sane.aiPipeline = new AIPipeline();
-  window.sane.INTENT     = INTENT;
+  window.sane.aiPipeline        = new AIPipeline();
+  window.sane.INTENT            = INTENT;
+  window.sane.formatOllamaError = formatOllamaError;
 
 })();

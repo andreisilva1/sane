@@ -9,6 +9,10 @@
   let abortCtrl = null;
   let activeCard = null;
 
+  // ── File classification regexes ───────────────────────────
+  const MANIFEST_RE = /^(package\.json|requirements\.txt|go\.mod|Cargo\.toml|Gemfile|pom\.xml|build\.gradle)$/i;
+  const README_RE   = /^readme\.md$/i;
+
   // ── Curated dependency registry ───────────────────────────
   // Authoritative versions — the ONLY allowed source for generated versions.
   const PINNED = {
@@ -557,7 +561,7 @@
       `{"summary":"one-line description","stack":"comma-separated technologies","steps":[{"file":"relative/path.ext","description":"what this file does and every npm package it imports"}]}\n\n` +
       `RULES:\n` +
       `1. Output starts with { and ends with } — no markdown, no explanation.\n` +
-      `2. First entry must be README.md.\n` +
+      `2. README.md must be the LAST entry — after all source files and manifests, so it can document the real commands and packages.\n` +
       `3. Include EVERY file needed: source files, components, styles, AND all config/manifest files. Never omit.\n` +
       `4. Dependency manifest (package.json / requirements.txt / go.mod / etc.) is MANDATORY. Its description must name every package the project will import.\n` +
       `5. Vite / React projects: index.html goes at the PROJECT ROOT (not inside public/). Entry file must be src/main.tsx. Reference it as <script type="module" src="/src/main.tsx">.\n` +
@@ -988,6 +992,211 @@
     }
   }
 
+  // ── Validation + Refinement layer ────────────────────────
+
+  // Identifiers that are always in scope — never flagged as undefined.
+  const KNOWN_GLOBALS = new Set([
+    'React','window','document','console','setTimeout','setInterval',
+    'clearTimeout','clearInterval','requestAnimationFrame','fetch',
+    'Promise','Array','Object','String','Number','Boolean','Math',
+    'Date','JSON','Error','Map','Set','WeakMap','WeakSet','Symbol',
+    'undefined','null','true','false','NaN','Infinity',
+    'parseInt','parseFloat','isNaN','isFinite',
+    'encodeURIComponent','decodeURIComponent','encodeURI','decodeURI',
+    'require','module','exports','__dirname','__filename','process',
+    'Buffer','global','globalThis','Proxy','Reflect',
+    'URLSearchParams','URL','FormData','AbortController',
+    'Headers','Request','Response','Event','CustomEvent',
+    'MutationObserver','IntersectionObserver','ResizeObserver',
+    // React built-ins used as JSX tags
+    'Fragment','Suspense','StrictMode','Profiler',
+  ]);
+
+  // Patterns that identify config-only files — never import at runtime.
+  const CONFIG_PATTERNS = [
+    /tailwind\.config/i, /vite\.config/i, /tsconfig/i,
+    /postcss\.config/i, /jest\.config/i, /webpack\.config/i,
+  ];
+
+  // Build a per-file symbol index.
+  // defined       = all names that are declared or imported in the file
+  // usedComponents = PascalCase identifiers used as JSX tags (<Foo>)
+  function buildSymbolIndex(generated) {
+    const index = new Map();
+    for (const { step, content } of generated) {
+      const f = step.file.replace(/\\/g, '/').toLowerCase();
+      if (!/\.(tsx?|jsx?)$/.test(f)) continue;
+      const clean = content.replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
+
+      const defined        = new Set();
+      const usedComponents = new Set();
+
+      // All import clauses → collect every PascalCase identifier
+      for (const [, clause] of clean.matchAll(/import\s+([\s\S]*?)\s+from\s+['"][^'"]+['"]/g)) {
+        for (const [, name] of clause.matchAll(/\b([A-Z]\w*)\b/g)) defined.add(name);
+      }
+      // Declarations: const/let/function/class/var + optional `export`
+      for (const m of clean.matchAll(/(?:export\s+)?(?:const|let|function|class|var)\s+([A-Z]\w*)/g))
+        defined.add(m[1]);
+      // Arrow component: `const Foo =` or `const Foo:`
+      for (const m of clean.matchAll(/const\s+([A-Z]\w*)\s*[:=]/g)) defined.add(m[1]);
+
+      // Used JSX components: <ComponentName[ />]
+      for (const m of clean.matchAll(/<([A-Z]\w*)[\s/>]/g)) usedComponents.add(m[1]);
+
+      index.set(f, { defined, usedComponents });
+    }
+    return index;
+  }
+
+  // Returns ValidationError[] for PascalCase components used but not defined/imported.
+  function validateUndefinedSymbols(generated, symbolIndex) {
+    const errors = [];
+    for (const { step } of generated) {
+      const f   = step.file.replace(/\\/g, '/').toLowerCase();
+      const sym = symbolIndex.get(f);
+      if (!sym) continue;
+      for (const comp of sym.usedComponents) {
+        if (KNOWN_GLOBALS.has(comp)) continue;
+        if (sym.defined.has(comp)) continue;
+        errors.push({
+          file: step.file, type: 'undefined-component',
+          message: `<${comp}> is used but not imported or defined in this file`,
+        });
+      }
+    }
+    return errors;
+  }
+
+  // Flags any runtime file that imports a config-only file.
+  function validateRuntimeImports(generated) {
+    const errors = [];
+    for (const { step, content } of generated) {
+      const f = step.file.replace(/\\/g, '/').toLowerCase();
+      if (!/\.(tsx?|jsx?)$/.test(f)) continue;
+      const clean = content.replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
+      for (const [, src] of clean.matchAll(/import\s+[\s\S]*?\s+from\s+['"]([^'"]+)['"]/g)) {
+        if (CONFIG_PATTERNS.some(p => p.test(src))) {
+          errors.push({
+            file: step.file, type: 'config-import',
+            message: `Importing config file '${src}' at runtime is invalid — remove this import`,
+          });
+        }
+      }
+    }
+    return errors;
+  }
+
+  // Ensures BrowserRouter exists in the project when router hooks are used.
+  function validateRouterContext(generated) {
+    const ROUTER_HOOKS = ['useNavigate','useLocation','useParams','useSearchParams'];
+    const usesHooks    = generated.some(({ content }) =>
+      ROUTER_HOOKS.some(h => new RegExp(`\\b${h}\\(`).test(content))
+    );
+    if (!usesHooks) return [];
+    const hasBrowserRouter = generated.some(({ content }) => /<BrowserRouter[\s>]/.test(content));
+    if (hasBrowserRouter) return [];
+
+    // Flag main entry file
+    const main = generated.find(({ step }) =>
+      /src\/main\.(tsx?|jsx?)$|src\/index\.(tsx?|jsx?)$|^main\.(tsx?|jsx?)$/i.test(step.file.replace(/\\/g, '/'))
+    );
+    if (!main) return [];
+    return [{
+      file: main.step.file, type: 'missing-browser-router',
+      message: 'React Router hooks are used but <BrowserRouter> not found — wrap <App /> in <BrowserRouter> here',
+    }];
+  }
+
+  // Validates that components referenced in <Route element={<X />}> exist.
+  function validateRoutes(generated, exportIndex, symbolIndex) {
+    const errors = [];
+    for (const { step, content } of generated) {
+      const f   = step.file.replace(/\\/g, '/').toLowerCase();
+      if (!/\.(tsx?|jsx?)$/.test(f)) continue;
+      const sym = symbolIndex.get(f);
+      for (const [, comp] of content.matchAll(/<Route[^>]+element=\{?\s*<([A-Z]\w*)/g)) {
+        const inLocal   = sym?.defined.has(comp) ?? false;
+        const inExports = [...exportIndex.values()].some(info =>
+          info.defaultExport === comp || info.named.has(comp)
+        );
+        if (!inLocal && !inExports) {
+          errors.push({
+            file: step.file, type: 'unknown-route-component',
+            message: `<Route> references <${comp}> which was not found in any generated file`,
+          });
+        }
+      }
+    }
+    return errors;
+  }
+
+  // Unified validation runner → Map<fileName, ValidationError[]>
+  function runValidation(generated, exportIndex, symbolIndex) {
+    const all = [
+      ...validateUndefinedSymbols(generated, symbolIndex),
+      ...validateRuntimeImports(generated),
+      ...validateRouterContext(generated),
+      ...validateRoutes(generated, exportIndex, symbolIndex),
+    ];
+    const byFile = new Map();
+    for (const err of all) {
+      if (!byFile.has(err.file)) byFile.set(err.file, []);
+      byFile.get(err.file).push(err);
+    }
+    return byFile;
+  }
+
+  // Targeted correction prompt for structured validation errors.
+  function buildValidationRefinePrompt(step, content, errors) {
+    const errorLines = errors.map(e => `  - [${e.type}] ${e.message}`).join('\n');
+    return (
+      `You are fixing a generated code file. Fix ONLY the issues listed — do not change unrelated logic.\n\n` +
+      `File: ${step.file}\n` +
+      `Project: ${plan.summary} (${plan.stack})\n\n` +
+      `ISSUES TO FIX:\n${errorLines}\n\n` +
+      `RULES:\n` +
+      `- Fix ONLY the listed issues\n` +
+      `- Ensure all used components are imported or defined\n` +
+      `- Do NOT remove working code or add unnecessary imports\n` +
+      `- Preserve the file's overall structure and intent\n\n` +
+      `CURRENT FILE:\n${content}\n\n` +
+      `Return the FULL corrected file — no explanation, no markdown fences.`
+    );
+  }
+
+  // Runs up to 2 targeted LLM refine passes for structured validation errors.
+  async function refineWithErrors(step, content, errors) {
+    let current = content;
+    for (let pass = 0; pass < 2; pass++) {
+      if (!errors.length) break;
+      try {
+        const raw     = await streamAsk(buildValidationRefinePrompt(step, current, errors));
+        const refined = stripFences(raw);
+        if (!refined || refined === current) break;
+        current = refined;
+        // Re-run cheap import check to decide if second pass is needed
+        errors = validateImports(current).map(({ symbol, source }) => ({
+          file: step.file, type: 'missing-import',
+          message: `Missing import: ${symbol} from '${source}'`,
+        }));
+      } catch { break; }
+    }
+    return current;
+  }
+
+  // Remove exact duplicate import lines from a file.
+  function cleanupImports(content) {
+    const seen = new Set();
+    return content.split('\n').filter(line => {
+      if (!line.trimStart().startsWith('import ')) return true;
+      const key = line.trim();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    }).join('\n');
+  }
+
   // ── Phase 2 prompt: single file content (raw text) ───────
   function buildFilePrompt(step) {
     const f        = step.file.toLowerCase();
@@ -1010,6 +1219,30 @@
       `- Output ONLY the raw file content — no explanation, no markdown fences, no JSON wrapper.\n` +
       `- Complete and working — no TODOs, no placeholders, no stub functions.\n` +
       `- Import every package you use. Only reference files listed above.`
+    );
+  }
+
+  // Builds a README prompt from the actual generated content — so scripts,
+  // packages, and file paths are taken from what was really written to disk,
+  // not from the model's imagination.
+  function buildReadmePrompt(step, generated) {
+    const MANIFEST_FILES = /^(package\.json|requirements\.txt|go\.mod|Cargo\.toml|Gemfile)$/i;
+    const manifest = generated.find(g => MANIFEST_FILES.test(g.step.file.split(/[/\\]/).pop()));
+    const fileList = generated.map(g => '  ' + g.step.file).join('\n');
+    return (
+      `You are writing a README.md for the following project.\n\n` +
+      `Project: ${plan.summary}\n` +
+      `Stack: ${plan.stack}\n\n` +
+      `Files generated:\n${fileList}\n\n` +
+      (manifest
+        ? `Dependency manifest (${manifest.step.file}) — USE ONLY the scripts and packages listed here:\n\`\`\`\n${manifest.content}\n\`\`\`\n\n`
+        : '') +
+      `Write a README.md with: project description, prerequisites, installation, and how to run.\n\n` +
+      `STRICT RULES:\n` +
+      `- Commands (npm run dev, python app.py, go run ., etc.) MUST come from the manifest above — never invent them.\n` +
+      `- Do NOT list packages or scripts that are not in the manifest.\n` +
+      `- Installation steps must match the actual stack (e.g. npm install, pip install -r requirements.txt).\n` +
+      `- Output ONLY raw markdown — no explanation, no code fences wrapping the whole file.`
     );
   }
 
@@ -1100,8 +1333,6 @@
       if (!Array.isArray(plan.steps) || plan.steps.length === 0)
         throw new Error('Plan has no files. Try a more specific prompt.');
 
-      const MANIFEST_RE = /^(package\.json|requirements\.txt|go\.mod|Cargo\.toml|Gemfile|pom\.xml|build\.gradle)$/i;
-
       // Inject manifest if model forgot to include one
       const hasManifest = plan.steps.some(s => MANIFEST_RE.test(s.file.split(/[/\\]/).pop()));
       if (!hasManifest) {
@@ -1118,12 +1349,19 @@
           plan.steps.push({ file: 'Gemfile',           description: 'Ruby gem dependencies' });
       }
 
-      // Manifests last so all source files are known when generating them
+      // Inject README.md if model forgot to include one
+      const hasReadme = plan.steps.some(s => README_RE.test(s.file.split(/[/\\]/).pop()));
+      if (!hasReadme)
+        plan.steps.push({ file: 'README.md', description: 'Project documentation with setup instructions and run commands' });
+
+      // Order: source files → manifests → README last
       plan.steps.sort((a, b) => {
-        const aM = MANIFEST_RE.test(a.file.split(/[/\\]/).pop());
-        const bM = MANIFEST_RE.test(b.file.split(/[/\\]/).pop());
-        if (aM && !bM) return 1;
-        if (!aM && bM) return -1;
+        const aF = a.file.split(/[/\\]/).pop();
+        const bF = b.file.split(/[/\\]/).pop();
+        const aR = README_RE.test(aF),   bR = README_RE.test(bF);
+        const aM = MANIFEST_RE.test(aF), bM = MANIFEST_RE.test(bF);
+        if (aR !== bR) return aR ? 1 : -1;  // README always last
+        if (aM !== bM) return aM ? 1 : -1;  // manifests second-to-last
         return 0;
       });
 
@@ -1172,11 +1410,13 @@
       progressMsg.innerHTML = `<span class="pb-spinner">⟳</span> ${escHtml(label)}`;
 
       try {
-        const raw   = await streamAsk(buildFilePrompt(step));
-        let content = stripFences(raw);
+        const isReadme = README_RE.test(step.file.split(/[/\\]/).pop());
+        const prompt   = isReadme ? buildReadmePrompt(step, generated) : buildFilePrompt(step);
+        const raw      = await streamAsk(prompt);
+        let content    = stripFences(raw);
 
-        // Validate imports + refine pass for component files
-        content = await refineIfNeeded(step, content, progressMsg);
+        // Validate imports + refine pass for component files (skip README)
+        if (!isReadme) content = await refineIfNeeded(step, content, progressMsg);
 
         // Update spinner after possible refine pass (label may have changed)
         progressMsg.innerHTML = `<span class="pb-spinner">⟳</span> ${escHtml(label)}`;
@@ -1211,9 +1451,10 @@
           window.sane.aiLockInput(false);
           return;
         }
-        progressMsg.textContent = `✗ ${label} — ${err.message}`;
+        const firstLine = err.message.split('\n')[0].trim();
+        progressMsg.textContent = `✗ ${label} — ${firstLine}`;
         progressMsg.className = 'ai-msg ai-pb-error';
-        addMsg('ai-pb-error', `Build stopped at "${step.file}".`);
+        addMsg('ai-pb-error', err.message);
         window.sane.aiLockInput(false);
         return;
       }
@@ -1247,6 +1488,40 @@
           : `✓ Cross-file imports validated${fixedCount ? ` — fixed ${fixedCount} file${fixedCount !== 1 ? 's' : ''}` : ''}`;
       } catch {
         crossMsg.textContent = '✓ Cross-file validation skipped';
+      }
+    }
+
+    // ── Validation + Refinement pass ─────────────────────
+    const hasJsFiles = generated.some(g => /\.(tsx?|jsx?)$/.test(g.step.file));
+    if (hasJsFiles && generated.length > 1) {
+      const valMsg = addMsg('ai-pb-system', '');
+      valMsg.innerHTML = '<span class="pb-spinner">⟳</span> Running validation pass…';
+      try {
+        const exportIdx    = buildExportIndex(generated);
+        const symbolIdx    = buildSymbolIndex(generated);
+        const errorsByFile = runValidation(generated, exportIdx, symbolIdx);
+        let   refinedCount = 0;
+        for (const [fileName, errors] of errorsByFile) {
+          const item = generated.find(g => g.step.file === fileName);
+          if (!item) continue;
+          valMsg.innerHTML = `<span class="pb-spinner">⟳</span> Fixing ${escHtml(fileName)}…`;
+          let refined = await refineWithErrors(item.step, item.content, errors);
+          refined = cleanupImports(refined);
+          if (refined !== item.content) {
+            await apiFetch('/file?path=' + encodeURIComponent(item.filePath), {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ content: refined }),
+            });
+            item.content = refined;
+            refinedCount++;
+          }
+        }
+        const totalErrors = [...errorsByFile.values()].reduce((n, errs) => n + errs.length, 0);
+        valMsg.textContent = totalErrors === 0
+          ? '✓ Validation passed'
+          : `✓ Validation complete${refinedCount ? ` — fixed ${refinedCount} file${refinedCount !== 1 ? 's' : ''}` : ` — ${totalErrors} issue${totalErrors !== 1 ? 's' : ''} noted`}`;
+      } catch {
+        valMsg.textContent = '✓ Validation skipped';
       }
     }
 

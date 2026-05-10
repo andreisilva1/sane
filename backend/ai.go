@@ -247,6 +247,19 @@ func serveAIPullStatus(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(payload)
 }
 
+// ── Ollama error message shown to the user ────────────────
+
+const ollamaFriendlyError = `Local AI is not responding.
+
+Possible causes:
+• Ollama is not running
+• Model is not loaded
+• First run may take longer
+
+Try:
+• Restarting Ollama
+• Running: ollama run <model>`
+
 // ── AI ask (streaming) ────────────────────────────────────
 
 func serveAIAsk(w http.ResponseWriter, r *http.Request) {
@@ -263,7 +276,7 @@ func serveAIAsk(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := startOllamaIfNeeded(); err != nil {
-		http.Error(w, "ollama unavailable: "+err.Error(), http.StatusServiceUnavailable)
+		http.Error(w, ollamaFriendlyError, http.StatusServiceUnavailable)
 		return
 	}
 
@@ -282,9 +295,34 @@ func serveAIAsk(w http.ResponseWriter, r *http.Request) {
 			"num_thread":  numThread,
 		},
 	})
-	resp, err := aiQueryClient.Post("http://localhost:11434/api/generate", "application/json", bytes.NewReader(reqBody))
-	if err != nil {
-		http.Error(w, "ollama unavailable: "+err.Error(), http.StatusServiceUnavailable)
+
+	// Use the request context so the Ollama call is canceled if the client
+	// disconnects. Retry once (2 s delay) to handle cold-start and transient
+	// connection failures before surfacing the friendly error.
+	ctx := r.Context()
+	var resp *http.Response
+	var lastErr error
+	for attempt := 0; attempt < 2; attempt++ {
+		if attempt > 0 {
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(2 * time.Second):
+			}
+		}
+		req, _ := http.NewRequestWithContext(ctx, http.MethodPost,
+			"http://localhost:11434/api/generate", bytes.NewReader(reqBody))
+		req.Header.Set("Content-Type", "application/json")
+		resp, lastErr = aiQueryClient.Do(req)
+		if lastErr == nil {
+			break
+		}
+		if ctx.Err() != nil {
+			return
+		}
+	}
+	if lastErr != nil {
+		http.Error(w, ollamaFriendlyError, http.StatusServiceUnavailable)
 		return
 	}
 	defer resp.Body.Close()
